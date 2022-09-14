@@ -12,6 +12,7 @@ iframe {
 
 .nav {
     position: fixed;
+    padding-left: 1rem;
     z-index: 100;
     left: 0px;
     width: var(--panel-width);

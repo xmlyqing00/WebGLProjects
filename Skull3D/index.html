@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=Edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<title>3D Skull</title>
+
+	<link rel="stylesheet" type="text/css" href="css/bootstrap.min.css" />
+	<link rel="stylesheet" type="text/css" href="css/style.css" />
+
+	<!-- jquery -->
+	<script type="text/javascript" src="js/lib/jquery-3.3.1.min.js"></script>
+
+	<!-- bootstrap -->
+	<script type="text/javascript" src="js/lib/popper.min.js"></script>
+	<script type="text/javascript" src="js/lib/bootstrap.min.js"></script>
+
+	<!-- three.js -->
+	<script type="text/javascript" src="js/lib/three.min.js"></script>
+	<script type="text/javascript" src="js/lib/Detector.js"></script>
+	<script type="text/javascript" src="js/lib/OrbitControls.js"></script>
+	<script type="text/javascript" src="js/lib/OBJLoader.js"></script>
+	<script type="text/javascript" src="js/lib/stats.min.js"></script>
+
+	<!-- FileSaver.js -->
+	<script type="text/javascript" src="js/lib/canvas-toBlob.js"></script>
+	<script type="text/javascript" src="js/lib/FileSaver.min.js"></script>
+
+	<!-- custom js -->
+	<script type="text/javascript" src="js/utils.js"></script>
+	<script type="text/javascript" src="js/skull.js"></script>
+	<script type="text/javascript" src="js/render.js"></script>
+
+</head>
+
+<body>
+	<div class="page">
+		<div class="main">
+
+			<!-- scene -->
+			<div id="scene-container"></div>
+			<p>Authors: Celong Liu, Xin Li, Yongqing Liang. All rights reserved.</p>
+
+		</div>
+		<div class="side">
+
+			<!-- stats -->
+			<div class="form-group">
+				<div class="form-row">
+					<div class="col-5" id="stats-container"></div>
+					<div class="col-7">
+						<p id="body-loading"></p>
+						<p id="face-loading"></p>
+						<p id="sticks-loading"></p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Load Data -->
+			<div class="form-group">
+				<div class="form-row">
+					<button type="button" class="btn btn-outline-primary btn-sm col-5" data-toggle="modal" data-target="#upload-data-modal">
+						Load Data
+					</button>
+					<button type="button" class="btn btn-outline-primary btn-sm col-5 offset-2" data-toggle="modal" data-target="#screenshot-modal"
+					 id="screenshot-btn" disabled="disabled">
+						Screenshot
+					</button>
+				</div>
+			</div>
+
+			<!-- Load Data Modal -->
+			<div class="modal fade" id="upload-data-modal" tabindex="-1" role="dialog" aria-labelledby="upload-data-modal-title" aria-hidden="true">
+				<div class="modal-dialog" role="document">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title" id="upload-data-modal-title">Load Data</h5>
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+								<span aria-hidden="true">&times;</span>
+							</button>
+						</div>
+						<div class="modal-body">
+
+							<label for="body-file">Skull Data</label>
+							<input type="file" class="form-control-file" id="body-file" accept=".obj">
+							<br>
+							<label for="face-file">Face Data</label>
+							<input type="file" class="form-control-file" id="face-file" accept=".obj">
+							<br>
+							<label for="sticks-file">Sticks Data</label>
+							<input type="file" class="form-control-file" id="sticks-file" accept=".cm">
+							<br>
+							<div class="form-row justify-content-end">
+								<button type="button" class="btn btn-secondary" onclick="useDefaultData()">Use Default Data</button>
+								<button type="button" class="btn btn-primary offset-1" onclick="uploadData()">Upload</button>
+							</div>
+
+							<br>
+							<hr>
+
+							<label>Advanced Option: (Locally Available)</label>
+
+							<div class="form-row">
+								<div class="col-8">
+									<div class="form-row">
+										<label class="col-1">St:</label>
+										<input type="text" class="form-control col-2" id="first-frame-idx">
+										<label class="col-1 offset-1">Ed</label>
+										<input type="text" class="form-control col-2" id="last-frame-idx">
+										<div class="custom-control custom-checkbox offset-1">
+											<input type="checkbox" class="custom-control-input" id="view-all-checked">
+											<label class="custom-control-label" for="view-all-checked">View All</label>
+										</div>
+									</div>
+								</div>
+								<button type="button" class="btn btn-primary col-4" onclick="saveFrames()">Save Frames</button>
+							</div>
+
+						</div>
+
+					</div>
+				</div>
+			</div>
+
+			<!-- Screenshot Modal -->
+			<div class="modal fade" id="screenshot-modal" tabindex="-1" role="dialog" aria-labelledby="screenshot-modal-title" aria-hidden="true">
+				<div class="modal-dialog" role="document">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title" id="screenshot-modal-title">Screenshot</h5>
+							<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+								<span aria-hidden="true">&times;</span>
+							</button>
+						</div>
+						<div class="modal-body">
+							<div class="form-row">
+								<label class="col-7">W:960 x H:600 px</label>
+								<button type="button" class="btn btn-primary col-5" onclick="saveSceneFullSize()">Save Full Size</button>
+							</div>
+							<br>
+							<div class="form-row">
+								<label class="col-7">W:600 x H:600 px</label>
+								<button type="button" class="btn btn-primary col-5" onclick="saveSceneSquareSize()">Save Square Size</button>
+							</div>
+							<br>
+							<div class="form-row">
+								<div class="col-7">
+									<div class="form-row">
+										<label class="col-2">Left:</label>
+										<input type="text" class="form-control col-2" id="screenshot-left">
+										<label class="col-2 offset-1">Top:</label>
+										<input type="text" class="form-control col-2" id="screenshot-top">
+									</div>
+									<br>
+									<div class="form-row">
+										<label class="col-2">Width:</label>
+										<input type="text" class="form-control col-2" id="screenshot-width">
+										<label class="col-2 offset-1">Height:</label>
+										<input type="text" class="form-control col-2" id="screenshot-height">
+									</div>
+								</div>
+								<button type="button" class="btn btn-primary col-5" onclick="saveSceneCustomSize()">Save Custom Size</button>
+							</div>
+							<br>
+							<hr>
+							<div class="form-row justify-content-end">
+								<button type="button" class="btn btn-primary col-7" onclick="saveFaceOpacityFrames()">Save Face Opacity Frames</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<hr>
+
+			<!-- Sticks -->
+			<div class="form-group">
+				<div class="form-row">
+					<label class="col-4" for="stick-index">Stick Id</label>
+					<select class="custom-select form-control-sm col-3 offset-1" id="stick-index" disabled="disabled" onchange="changeStickIndex()">
+					</select>
+					<button type="button" class="btn btn-outline-primary btn-sm col-3 offset-1" id="save-sticks" disabled="disabled" onclick="saveSticks()">Save</button>
+				</div>
+			</div>
+			<div class="form-group">
+				<label for="stick-length-range">Stick Length [0,30]</label>
+				<div class="form-row">
+					<input type="range" class="custom-range form-control-sm col-9" min="0.1" max="30" step="0.1" id="stick-length-range" disabled="disabled"
+					 onchange="changeStickLengthByRange()">
+					<input type="text" class="form-control form-control-sm col-3" id="stick-length-input" disabled="disabled" oninput="changeStickLengthByInput()">
+				</div>
+			</div>
+			<hr>
+
+			<!-- Camera Position -->
+			<div class="form-group">
+				<div class="form-row">
+					<label class="col-12">Camera Position (X, Y, Z)</label>
+				</div>
+				<div class="form-row">
+					<input type="text" id="set-camera-position-x" class="form-control form-control-sm col-2">
+					<input type="text" id="set-camera-position-y" class="form-control form-control-sm col-2 offset-1">
+					<input type="text" id="set-camera-position-z" class="form-control form-control-sm col-2 offset-1">
+					<button type="button" class="btn btn-outline-primary btn-sm col-3 offset-1" id="set-camera-position" disabled="disabled"
+					 onclick="setCameraPosition()">Set</button>
+				</div>
+				<div class="form-row">
+					<label class="col-1">X=</label>
+					<label id="camera-position-x" class="col-2"></label>
+					<label class="col-1 offset-1">Y=</label>
+					<label id="camera-position-y" class="col-2"></label>
+					<label class="col-1 offset-1">Z=</label>
+					<label id="camera-position-z" class="col-2"></label>
+				</div>
+			</div>
+
+			<!-- Camera Target -->
+			<div class="form-group">
+				<div class="form-row">
+					<label class="col-12">Camera Target (X, Y, Z)</label>
+				</div>
+				<div class="form-row">
+					<input type="text" id="set-camera-target-x" class="form-control form-control-sm col-2">
+					<input type="text" id="set-camera-target-y" class="form-control form-control-sm col-2 offset-1">
+					<input type="text" id="set-camera-target-z" class="form-control form-control-sm col-2 offset-1">
+					<button type="button" class="btn btn-outline-primary btn-sm col-3 offset-1" id="set-camera-target" disabled="disabled" onclick="setCameraTarget()">Set</button>
+				</div>
+				<div class="form-row">
+					<label class="col-1">X=</label>
+					<label id="camera-target-x" class="col-2"></label>
+					<label class="col-1 offset-1">Y=</label>
+					<label id="camera-target-y" class="col-2"></label>
+					<label class="col-1 offset-1">Z=</label>
+					<label id="camera-target-z" class="col-2"></label>
+				</div>
+			</div>
+			<hr>
+
+			<!-- Side -->
+			<div class="form-group">
+				<div class="form-row justify-content-between">
+					<div class="custom-control custom-checkbox form-control-sm">
+						<input type="checkbox" class="custom-control-input" id="double-side" disabled="disabled" onchange="setRenderSide()">
+						<label class="custom-control-label" for="double-side">Double Side</label>
+					</div>
+					<div class="custom-control custom-checkbox form-control-sm ">
+						<input type="checkbox" class="custom-control-input" id="white-background" disabled="disabled" onchange="setWhiteBackground()">
+						<label class="custom-control-label" for="white-background">White Bg</label>
+					</div>
+				</div>
+			</div>
+
+			<!-- Opacity -->
+			<div class="form-group">
+				<!-- <label for="body-opacity-range">Skull Opacity [0,1]</label>
+				<div class="form-row">
+					<input type="range" class="custom-range form-control-sm col-9" min="0" max="1" step="0.05" id="body-opacity-range" disabled="disabled"
+					 onchange="changeBodyOpacityByRange()">
+					<input type="text" class="form-control form-control-sm col-3" id="body-opacity-input" disabled="disabled" oninput="changeBodyOpacityByInput()"
+					/>
+				</div> -->
+				<label for="face-opacity-range">Face Opacity [0,1]</label>
+				<div class="form-row">
+					<input type="range" class="custom-range form-control-sm col-9" min="0" max="1" step="0.05" id="face-opacity-range" disabled="disabled"
+					 onchange="changeFaceOpacityByRange()">
+					<input type="text" class="form-control form-control-sm col-3" id="face-opacity-input" disabled="disabled" oninput="changeFaceOpacityByInput()"
+					/>
+				</div>
+				<!-- <label for="sticks-opacity-range">Sticks Opacity [0,1]</label>
+				<div class="form-row">
+					<input type="range" class="custom-range form-control-sm col-9" min="0" max="1" step="0.05" id="sticks-opacity-range" disabled="disabled"
+					 onchange="changeSticksOpacityByRange()">
+					<input type="text" class="form-control form-control-sm col-3" id="sticks-opacity-input" disabled="disabled" oninput="changeSticksOpacityByInput()"
+					/>
+				</div> -->
+			</div>
+		</div>
+	</div>
+
+</body>
+
+</html>

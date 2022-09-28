@@ -498,7 +498,7 @@ var FirstPerson_Control = function ( scale, object, plane, scene, vertex, edge, 
     this.domElement.addEventListener( 'mousewheel', bind( this, this.mousewheel), false);
     this.domElement.addEventListener( 'DOMMouseScroll', bind( this, this.DOMMouseScroll), false);
 
-    document.addEventListener( 'keydown', (event) => this.keydown(event) );
+    document.addEventListener( 'keydown', (event) => this.keydown(event));
     document.addEventListener( 'keyup',  (event) => this.keyup(event) ) ;
 
     this.updateMovementVector();

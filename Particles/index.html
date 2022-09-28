@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Bouncing Ball</title>
+		<style>
+			body { margin: 0; }
+		</style>
+	</head>
+	<body>
+
+        <div id="container"></div>
+
+        <script async src="https://ga.jspm.io/npm:es-module-shims@1.5.17/dist/es-module-shims.js"></script>
+        <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.144.0/build/three.module.js",
+                "three/addons/": "./jsm/"
+            }
+        }
+        </script>
+		<script type="module">
+
+            // Load module
+            import * as THREE from "three"
+            import Stats from "three/addons/libs/stats.module.js"
+            import { TrackballControls } from "three/addons/controls/TrackballControls.js"
+            import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+            import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js';
+
+            // Simulater variables
+            let camera, scene, renderer, controls, stats
+            const clock = new THREE.Clock()
+            let delta = 0
+            let stop = false
+
+            // Physic variables
+            let gravity, wind
+            const air_resitance = 0.01
+            const c_r = 1 
+            const c_f = 0 
+
+            // Object variables
+            let ball, ball_r, ball_v, container, inobj
+            
+            // GUI params
+            const canvas = document.querySelector("#container")
+            const params = {
+                ball_m: 1,                  // Ball Mass
+                gravity: 40,                // Gravity
+                wind: 20,                   // Wind strong
+				c_r: 0.6,                   // response restriction
+				c_f: 0.1,                   // friction restriction
+				render_fps: 60, 
+                container_r: 150,           // Container size
+                container_shape: 'Box',     // Container shape
+                container_inobj: false,
+				Reset: function () {
+                    renderer.domElement.remove()
+                    init()
+				}
+			}
+            const shape_types = {
+                "Box": "Box", 
+                "Ball": "Sphere", 
+                "Dodecahedron": "Dodecahedron"
+            }
+            
+			init()
+			animate()
+
+            function init() {
+
+                // Init scene
+                scene = new THREE.Scene()
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 3000 )
+                camera.position.z = -3 * params.container_r
+                camera.position.y = 2 * params.container_r
+                camera.position.x -= 150
+
+                renderer = new THREE.WebGLRenderer({alpha: true})
+                renderer.setPixelRatio( window.devicePixelRatio )
+                renderer.setSize( window.innerWidth, window.innerHeight )
+                renderer.autoClear = false
+                canvas.appendChild( renderer.domElement )
+
+                const light_env = new THREE.AmbientLight( 0xf0f0f0, 0.5 ); // soft white light
+                scene.add( light_env )
+
+                const light_point1 = new THREE.PointLight( 0xffffff, 1, 0 )
+                light_point1.position.set( 200, 200, -300 )
+                scene.add(light_point1)
+
+                const light_point2 = new THREE.PointLight( 0xffffff, 1, 0 )
+                light_point2.position.set( -200, 200, 300 )
+                scene.add(light_point2)
+                
+                // Set physics values
+                gravity = new THREE.Vector3(0, -1, 0)  // gravity in (x, y, z)
+                gravity.multiplyScalar(params.gravity)
+
+                // Set wind
+                wind = new THREE.Vector3().random().subScalar(0.5)
+                wind.y = 0
+                wind.normalize()
+                
+                const wind_origin = new THREE.Vector3( 100, 100, -300)
+                const wind_len = 100
+                const arrowHelper = new THREE.ArrowHelper( wind, wind_origin, wind_len, 0xffff00 )
+                scene.add( arrowHelper )
+                wind.multiplyScalar(params.wind)
+
+                // Add plane
+                const bg_geometry = new THREE.PlaneGeometry(2000, 2000);
+                const bg_texture = new THREE.TextureLoader().load("tamu.jpg")
+                const bg_material = new THREE.MeshBasicMaterial({
+                    side: THREE.DoubleSide,
+                    map: bg_texture
+                });
+                const plane = new THREE.Mesh( bg_geometry, bg_material );
+                plane.rotation.x += Math.PI / 2;
+                scene.add( plane );
+
+                // Add a container
+                let container_geometry
+                switch (params.container_shape) {
+                    case "Box":
+                        container_geometry = new THREE.BoxGeometry(params.container_r * 2, params.container_r * 2, params.container_r * 2)    
+                        break
+                    case "Sphere":
+                        container_geometry = new THREE.SphereGeometry(params.container_r)
+                        ball.position.x *= 0.5
+                        ball.position.z *= 0.5
+                        break
+                    case "Dodecahedron":
+                        container_geometry = new THREE.DodecahedronGeometry(params.container_r)
+                        ball.position.x *= 0.5
+                        ball.position.z *= 0.5
+                        break
+                    default:
+                        container_geometry = new THREE.BoxGeometry(params.container_r * 2, params.container_r * 2, params.container_r * 2)    
+                        break
+                }
+                
+                const container_material = new THREE.MeshPhysicalMaterial({  
+                    roughness: 0.01,  
+                    transmission: 0.8,  
+                    thickness: 0.5, // Add refraction!
+                })
+                container = new THREE.Mesh(container_geometry.toNonIndexed(), container_material)
+                container.position.y += params.container_r
+                scene.add(container)
+
+                // Add obstacle inside container
+                if (params.container_inobj) {
+                    const inobj_geometry = new THREE.OctahedronGeometry(params.container_r * 0.75)
+                    const inobj_material = new THREE.MeshLambertMaterial( { color: 0x77ff77 } )
+                    inobj = new THREE.Mesh(inobj_geometry.toNonIndexed(), inobj_material)
+                    inobj.position.y += params.container_r
+                    scene.add(inobj)
+                }
+                
+                // Add ball
+                ball_r = params.ball_m * 10
+                const ball_geometry = new THREE.SphereGeometry(ball_r, 32, 16)
+                const ball_material = new THREE.MeshLambertMaterial( { color: 0x0000ff } )
+                ball = new THREE.Mesh( ball_geometry, ball_material )
+                ball_v = new THREE.Vector3(0, 0, 0)
+                if (params.container_inobj) {
+                    ball.position.y = params.container_r * 1.5
+                    ball.position.x = params.container_r * 0.5
+                    ball.position.z = -params.container_r * 0.5
+                    ball_v.set(-200 , 0, 200)
+                } else {
+                    ball.position.y = params.container_r * 1.5
+                    ball.position.x = (Math.random() - 0.5) * params.container_r * 1.5
+                    ball.position.z = (Math.random() - 0.5) * params.container_r * 1.5
+                }
+                
+                scene.add( ball )
+
+                
+                // Add stats and controls
+                stats = new Stats();
+				canvas.appendChild( stats.dom );
+
+				window.addEventListener( "resize", onWindowResize );
+
+                controls = new TrackballControls(camera, renderer.domElement);
+                controls.dynamicDampingFactor = 0.5;
+                controls.rotateSpeed = 2;
+                controls.zoomSpeed = 2;
+                controls.panSpeed = 3;
+                
+                // Add GUI
+                const gui = new GUI()
+                
+                const folder1 = gui.addFolder("Physics");
+                folder1.add(params, "ball_m", 1, 5)
+                folder1.add(params, "gravity", 0, 100)
+				folder1.add(params, "wind", 0, 200)
+				folder1.add(params, "c_r", 0, 0.9)
+				folder1.add(params, "c_f", 0, 1)
+                folder1.add(params, "render_fps", 1, 1 / clock.getDelta())
+
+                const folder2 = gui.addFolder("Container")
+                folder2.add(params, "container_r", 50, 300)
+                folder2.add(params, "container_shape", shape_types)
+                folder2.add(params, "container_inobj")
+                folder2.add(params, "Reset")
+
+				folder1.open()
+                folder2.open()
+            }
+
+			function animate() {
+				requestAnimationFrame( animate )
+
+                delta += clock.getDelta()
+                const interval = 1 / params.render_fps
+
+                if (delta > interval && !stop) {
+                    render(interval);
+                    delta = delta % interval
+                    // stop = true
+                }
+                
+                controls.update()
+				renderer.render( scene, camera )
+                stats.update()
+			}
+
+            function render(h) {
+
+                let container_faces = getFaces(container)
+                if (params.container_inobj) {
+                    container_faces = container_faces.concat(getFaces(inobj, true))
+                }
+
+                let ball_v_old = ball_v.clone()
+                let ball_old = ball.clone()
+                // let still_flag = false
+
+                const acc = gravity.clone()
+                acc.addScaledVector(ball_v, -air_resitance / params.ball_m)
+                acc.addScaledVector(wind, 1 / params.ball_m)
+                
+                ball_v.addScaledVector(acc, h)
+                ball.position.addScaledVector(ball_v, h)
+
+                while (h > 0) {
+
+                    // Collision detection
+                    const move = ball.position.clone().sub(ball_old.position)
+                    let collision_flag = false
+                    let nearest_face_id = 0
+                    let nearest_face_h = 1
+                    
+                    for (let i = 0; i < container_faces.length; i++) {
+                        const tri = container_faces[i]
+                        
+                        const n = new THREE.Vector3()
+                        tri.getNormal(n)
+                        
+                        const scalar_old = tri.a.clone().sub(ball_old.position).dot(n) - ball_r
+                        const scalar_new = tri.a.clone().sub(ball.position).dot(n) - ball_r
+                        const fraction = scalar_old / (scalar_old - scalar_new)
+                        
+                        // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
+                        // console.log("subtract", tri.a.clone().sub(ball_old.position))
+                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                            
+                            const p_on_plane = ball_old.position.clone()
+                            p_on_plane.addScaledVector(move, fraction)
+                            
+                            // console.log("p on plane", p_on_plane)
+                            if (!tri.containsPoint(p_on_plane)) continue
+                            
+                            if (nearest_face_h > fraction) {
+                                nearest_face_h = fraction
+                                nearest_face_id = i
+                            }
+                            collision_flag = true
+                        }
+                    }
+
+                    // console.log("collision", collision_flag, nearest_face_id, container_faces[nearest_face_id], "fraction", nearest_face_h)
+
+                    // Process collision and response
+                    if (collision_flag) {
+                        const tri = container_faces[nearest_face_id]
+                        
+                        const n = new THREE.Vector3()
+                        tri.getNormal(n)
+                        
+                        const p_on_plane = ball_old.position.clone()
+                        const fraction = nearest_face_h
+                        p_on_plane.addScaledVector(move, fraction)
+
+                        // Update remaining timestamp
+                        h -= fraction * h
+
+                        // Compute velocity after bouncing
+                        const ball_v_scalar = ball_v.clone().dot(n)
+                        let new_v_n = n.clone().multiplyScalar(ball_v_scalar)
+                        let new_v_t = ball_v.clone().sub(new_v_n)
+
+                        // Add velocity response restriction
+                        new_v_n.multiplyScalar(params.c_r).negate()
+                        new_v_t.multiplyScalar(1 - params.c_f)
+                        ball_v_old = ball_v.clone()
+                        ball_v = new THREE.Vector3()
+                        ball_v.addVectors(new_v_n, new_v_t)
+                        
+                        // Update ball position
+                        ball.position.set(p_on_plane.x, p_on_plane.y, p_on_plane.z)
+                        ball_old = ball.clone() 
+                        ball.position.addScaledVector(ball_v, h)
+
+                        // console.log("velocity", ball_v, new_v_n, new_v_t)
+                        // console.log("timestamp", h, "fraction", fraction)
+                        // console.log("position", ball_old.position, ball.position)
+
+                        // if (ball.position.distanceTo(ball_old.position) < 1e-3) {
+                            // still_flag = true
+                        // }
+
+                        // console.log("sitll flag", still_flag)
+                    } else {
+                        break
+                    }
+
+                }
+                
+                    
+            }
+
+            // function getVertex(vertices, idx) {
+            //     return new THREE.Vector3(vertices.getX(idx), vertices.getY(idx), vertices.getZ(idx))
+            // }
+
+            function getFaces(mesh, invert_normal=false) {
+                const vertices = mesh.geometry.getAttribute("position")
+                let faces = []
+
+                for (let i = 0; i < vertices.count; i += 3) {
+                    let tri = []
+                    for (let j = 0; j < 3; j ++) {
+                        const base = i + j
+                        const v = new THREE.Vector3(vertices.getX(base), vertices.getY(base), vertices.getZ(base))
+                        v.add(mesh.position)
+                        tri.push(v)
+                    }
+                    if (invert_normal) {
+                        faces.push(new THREE.Triangle(tri[0], tri[2], tri[1]))
+                    } else {
+                        faces.push(new THREE.Triangle(tri[0], tri[1], tri[2]))
+                    }
+                    
+                }
+                
+                // console.log("faces", faces)
+                return faces
+            }
+
+            function onWindowResize() {
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                camera.lookAt( scene.position );
+
+                renderer.setSize( window.innerWidth, window.innerHeight );
+                
+                controls.handleResize();
+
+            }
+
+
+		</script>
+
+	</body>
+</html>

@@ -221,7 +221,9 @@ var City = function(scale) {
 
             var geometry = new THREE.ConvexGeometry(points);
             var building = new THREE.Mesh(geometry);
-            THREE.GeometryUtils.merge(buildings_geometry, building);
+            building.updateMatrix()
+            buildings_geometry.merge(building.geometry, building.matrix)
+            // THREE.GeometryUtils.merge(buildings_geometry, building);
 
             var text = object.building_name[building_index];
             if ( text == "lxy5201314") continue;
@@ -283,8 +285,10 @@ var City = function(scale) {
                 highway.position.z = 0;
 
                 highway.rotation.z = angle;
-
-                THREE.GeometryUtils.merge(highways_geometry, highway);
+                
+                highway.updateMatrix()
+                highways_geometry.merge(highway.geometry, highway.matrix)
+                // THREE.GeometryUtils.merge(highways_geometry, highway);
 
                 if ( i > name_index && mid_point[0] == -2000) {
 
@@ -396,8 +400,10 @@ var City = function(scale) {
                 footway.position.z = 0;
 
                 footway.rotation.z = angle;
-
-                THREE.GeometryUtils.merge(footways_geometry, footway);
+                
+                footway.updateMatrix()
+                footways_geometry.merge(footway.geometry, footway.matrix)
+                // THREE.GeometryUtils.merge(footways_geometry, footway);
 
                 if ( i > name_index && mid_point[0] == -2000) {
 
@@ -496,7 +502,9 @@ var City = function(scale) {
 
                 canal.rotation.z = angle;
 
-                THREE.GeometryUtils.merge(canals_geometry, canal);
+                canal.updateMatrix()
+                canals_geometry.merge(canal.geometry, canal.matrix)
+                // THREE.GeometryUtils.merge(canals_geometry, canal);
 
             }
         }
@@ -534,8 +542,10 @@ var City = function(scale) {
                 stream.position.z = 0;
 
                 stream.rotation.z = angle;
-
-                THREE.GeometryUtils.merge(streams_geometry, stream);
+                
+                stream.updateMatrix()
+                streams_geometry.merge(stream.geometry, stream.matrix)
+                // THREE.GeometryUtils.merge(streams_geometry, stream);
 
             }
         }
@@ -564,7 +574,10 @@ var City = function(scale) {
             var geometry = new THREE.ShapeGeometry(points);
             var riverbank = new THREE.Mesh(geometry);
             riverbank.position.z = 0.1;
-            THREE.GeometryUtils.merge(riverbanks_geometry, riverbank);
+            
+            riverbank.updateMatrix
+            riverbanks_geometry.merge(riverbank.geometry, riverbank.matrix)
+            // THREE.GeometryUtils.merge(riverbanks_geometry, riverbank);
 
         }
 

@@ -36,7 +36,7 @@
             let face_len = 0
 
             // Physic variables
-            let gravity, wind, wind_dir
+            let gravity, gravity_dir, wind, wind_dir
             const air_resitance = 0.01
             const c_r = 1 
             const c_f = 0 
@@ -57,7 +57,7 @@
             }
 
             const pts_src3 = {
-                pos: new THREE.Vector3(-50, 100, 50),
+                pos: new THREE.Vector3(-50, 100, 100),
                 velocity: new THREE.Vector3(50, 0, -150),
                 color: new THREE.Color(0.2, 0.6, 0.8)
             }
@@ -119,8 +119,7 @@
                 scene.add(light_point2)
                 
                 // Set physics values
-                gravity = new THREE.Vector3(0, -1, 0)  // gravity in (x, y, z)
-                gravity.multiplyScalar(params.gravity)
+                gravity_dir = new THREE.Vector3(0, -1, 0)  // gravity in (x, y, z)
 
                 // Set wind
                 wind_dir = new THREE.Vector3().random().subScalar(0.5)
@@ -131,10 +130,9 @@
                 const wind_len = 100
                 const arrowHelper = new THREE.ArrowHelper( wind_dir, wind_origin, wind_len, 0xffff00 )
                 scene.add( arrowHelper )
-                
 
                 // Add plane
-                const bg_geometry = new THREE.PlaneGeometry(1000, 1000);
+                const bg_geometry = new THREE.PlaneGeometry(1000, 550);
                 const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
                 const bg_material = new THREE.MeshBasicMaterial({
                     // side: THREE.DoubleSide,
@@ -250,7 +248,7 @@
                 const gui = new GUI()
                 
                 const folder1 = gui.addFolder("Environments");
-                folder1.add(params, "gravity", 0, 100)
+                folder1.add(params, "gravity", 0, 200)
 				folder1.add(params, "wind", 0, 200)
 				folder1.add(params, "c_r", 0, 0.9)
 				folder1.add(params, "c_f", 0, 1)
@@ -283,6 +281,8 @@
 
                 wind = wind_dir.clone()
                 wind.multiplyScalar(params.wind)
+                gravity = gravity_dir.clone()
+                gravity.multiplyScalar(params.gravity)
 
                 updateSources(h)
                 updateParticles(h)

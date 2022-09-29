@@ -38,11 +38,10 @@
             // Physic variables
             let gravity, gravity_dir, wind, wind_dir
             const air_resitance = 0.01
-            const c_r = 1 
-            const c_f = 0 
+            const bouncing_r = 5
 
             // Object variables
-            const pt_r = 3
+            const pt_r = 4
             let plane, statue
             let pts, pts_geo, pts_material
             const pts_src1 = {
@@ -70,8 +69,8 @@
                 gravity: 40,                // Gravity
                 wind: 1,                   // Wind strong
 				c_r: 0.6,                   // response restriction
-				c_f: 0.1,                   // friction restriction
-                max_pts_num: 50000,
+				c_f: 0.05,                   // friction restriction
+                max_pts_num: 10000,
                 new_pts_num: 10,
                 statue_shape: 'None',     // Container shape
                 generator2: false,
@@ -188,7 +187,7 @@
                         statue_geo = new THREE.LatheGeometry(points, 10);
                         statue_material = new THREE.MeshLambertMaterial( { color: 0xdd9911, side: THREE.DoubleSide } )
                         statue = new THREE.Mesh(statue_geo.toNonIndexed(), statue_material)
-                        statue.scale.set(6, 6, 6)
+                        statue.scale.set(8, 8, 8)
                         statue.position.y += 100
                         statue.updateMatrix()
                         statue.geometry.applyMatrix4(statue.matrix)
@@ -255,8 +254,8 @@
                 folder1.add(params, "statue_shape", statue_shapes)
 
                 const folder2 = gui.addFolder("Particles")
-                folder2.add(params, "new_pts_num", 1, 500)
-                folder2.add(params, "max_pts_num", 1000, 100000)
+                folder2.add(params, "new_pts_num", 1, 3000)
+                folder2.add(params, "max_pts_num", 1000, 500000)
                 folder2.add(params, "generator2")
                 folder2.add(params, "generator3")
                 folder2.add(params, "Reset")
@@ -342,7 +341,7 @@
 
                 // Update pts position
                 for (let p of pts) {
-
+                    
                     const acc = gravity.clone()
                     acc.addScaledVector(p.velocity, -air_resitance)
                     acc.addScaledVector(wind, 1)
@@ -366,8 +365,8 @@
                             const n = new THREE.Vector3()
                             tri.getNormal(n)
                             
-                            const scalar_old = tri.a.clone().sub(pos_old).dot(n) - pt_r
-                            const scalar_new = tri.a.clone().sub(p.pos).dot(n) - pt_r
+                            const scalar_old = tri.a.clone().sub(pos_old).dot(n) - bouncing_r
+                            const scalar_new = tri.a.clone().sub(p.pos).dot(n) - bouncing_r
                             const fraction = scalar_old / (scalar_old - scalar_new)
                             
                             // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
@@ -414,9 +413,8 @@
                             p.pos.set(p_on_plane.x, p_on_plane.y, p_on_plane.z)
                             pos_old = p.pos.clone()
                             p.pos.addScaledVector(p.velocity, h_rest)
-                            break
-                            // console.log(h_rest, pos_old)
-
+                            // break
+                            
                         } else {
                             break
                         }

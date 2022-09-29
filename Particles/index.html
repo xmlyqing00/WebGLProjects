@@ -413,7 +413,9 @@
                             // Update ball position
                             p.pos.set(p_on_plane.x, p_on_plane.y, p_on_plane.z)
                             pos_old = p.pos.clone()
-                            p.pos.addScaledVector(p.velocity, h)
+                            p.pos.addScaledVector(p.velocity, h_rest)
+                            break
+                            // console.log(h_rest, pos_old)
 
                         } else {
                             break

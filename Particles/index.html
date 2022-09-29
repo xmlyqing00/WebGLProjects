@@ -3,14 +3,12 @@
 	<head>
 		<meta charset="utf-8">
 		<title>Bouncing Ball</title>
-		<style>
-			body { margin: 0; }
-		</style>
+        <link type="text/css" rel="stylesheet" href="style.css">
 	</head>
 	<body>
 
         <div id="container"></div>
-
+        <div id="info"></div>
         <script async src="https://ga.jspm.io/npm:es-module-shims@1.5.17/dist/es-module-shims.js"></script>
         <script type="importmap">
         {
@@ -20,6 +18,7 @@
             }
         }
         </script>
+        
 		<script type="module">
 
             // Load module
@@ -28,43 +27,66 @@
             import { TrackballControls } from "three/addons/controls/TrackballControls.js"
             import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
             import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js';
+            import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js';
 
             // Simulater variables
             let camera, scene, renderer, controls, stats
             const clock = new THREE.Clock()
-            let delta = 0
-            let stop = false
+            let h_count = 0
+            let face_len = 0
 
             // Physic variables
-            let gravity, wind
+            let gravity, wind, wind_dir
             const air_resitance = 0.01
             const c_r = 1 
             const c_f = 0 
 
             // Object variables
-            let ball, ball_r, ball_v, container, inobj
+            const pt_r = 3
+            let plane, statue
+            let pts, pts_geo, pts_material
+            const pts_src1 = {
+                pos: new THREE.Vector3(150, 100, 0),
+                velocity: new THREE.Vector3(-100, 0, 0),
+                color: new THREE.Color(0.75, 0.25, 0.5)
+            }
+            const pts_src2 = {
+                pos: new THREE.Vector3(-150, 120, 0),
+                velocity: new THREE.Vector3(100, 0, 0),
+                color: new THREE.Color(0.5, 0.75, 0.5)
+            }
+
+            const pts_src3 = {
+                pos: new THREE.Vector3(-50, 100, 50),
+                velocity: new THREE.Vector3(50, 0, -150),
+                color: new THREE.Color(0.2, 0.6, 0.8)
+            }
+            
+            const disc = new THREE.TextureLoader().load("assets/disc.png")
             
             // GUI params
             const canvas = document.querySelector("#container")
             const params = {
-                ball_m: 1,                  // Ball Mass
                 gravity: 40,                // Gravity
-                wind: 20,                   // Wind strong
+                wind: 1,                   // Wind strong
 				c_r: 0.6,                   // response restriction
 				c_f: 0.1,                   // friction restriction
-				render_fps: 60, 
-                container_r: 150,           // Container size
-                container_shape: 'Box',     // Container shape
-                container_inobj: false,
+                max_pts_num: 50000,
+                new_pts_num: 10,
+                statue_shape: 'None',     // Container shape
+                generator2: false,
+                generator3: false,
 				Reset: function () {
                     renderer.domElement.remove()
+                    statue = null
                     init()
 				}
 			}
-            const shape_types = {
-                "Box": "Box", 
-                "Ball": "Sphere", 
-                "Dodecahedron": "Dodecahedron"
+            const statue_shapes = {
+                "None": "None", 
+                "Cone": "Cone", 
+                "Lathe": "Lathe",
+                "Human": "Human"
             }
             
 			init()
@@ -74,10 +96,10 @@
 
                 // Init scene
                 scene = new THREE.Scene()
-                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 3000 )
-                camera.position.z = -3 * params.container_r
-                camera.position.y = 2 * params.container_r
-                camera.position.x -= 150
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 2000 )
+                camera.position.z = -200
+                camera.position.y = 300
+                camera.position.x = 50
 
                 renderer = new THREE.WebGLRenderer({alpha: true})
                 renderer.setPixelRatio( window.devicePixelRatio )
@@ -88,11 +110,11 @@
                 const light_env = new THREE.AmbientLight( 0xf0f0f0, 0.5 ); // soft white light
                 scene.add( light_env )
 
-                const light_point1 = new THREE.PointLight( 0xffffff, 1, 0 )
+                const light_point1 = new THREE.PointLight( 0xffffff, 0.8, 0 )
                 light_point1.position.set( 200, 200, -300 )
                 scene.add(light_point1)
 
-                const light_point2 = new THREE.PointLight( 0xffffff, 1, 0 )
+                const light_point2 = new THREE.PointLight( 0xffffff, 0.5, 0 )
                 light_point2.position.set( -200, 200, 300 )
                 scene.add(light_point2)
                 
@@ -101,85 +123,116 @@
                 gravity.multiplyScalar(params.gravity)
 
                 // Set wind
-                wind = new THREE.Vector3().random().subScalar(0.5)
-                wind.y = 0
-                wind.normalize()
+                wind_dir = new THREE.Vector3().random().subScalar(0.5)
+                // wind.y = 0
+                wind_dir.normalize()
                 
                 const wind_origin = new THREE.Vector3( 100, 100, -300)
                 const wind_len = 100
-                const arrowHelper = new THREE.ArrowHelper( wind, wind_origin, wind_len, 0xffff00 )
+                const arrowHelper = new THREE.ArrowHelper( wind_dir, wind_origin, wind_len, 0xffff00 )
                 scene.add( arrowHelper )
-                wind.multiplyScalar(params.wind)
+                
 
                 // Add plane
-                const bg_geometry = new THREE.PlaneGeometry(2000, 2000);
-                const bg_texture = new THREE.TextureLoader().load("tamu.jpg")
+                const bg_geometry = new THREE.PlaneGeometry(1000, 1000);
+                const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
                 const bg_material = new THREE.MeshBasicMaterial({
-                    side: THREE.DoubleSide,
+                    // side: THREE.DoubleSide,
                     map: bg_texture
-                });
-                const plane = new THREE.Mesh( bg_geometry, bg_material );
-                plane.rotation.x += Math.PI / 2;
-                scene.add( plane );
-
-                // Add a container
-                let container_geometry
-                switch (params.container_shape) {
-                    case "Box":
-                        container_geometry = new THREE.BoxGeometry(params.container_r * 2, params.container_r * 2, params.container_r * 2)    
-                        break
-                    case "Sphere":
-                        container_geometry = new THREE.SphereGeometry(params.container_r)
-                        ball.position.x *= 0.5
-                        ball.position.z *= 0.5
-                        break
-                    case "Dodecahedron":
-                        container_geometry = new THREE.DodecahedronGeometry(params.container_r)
-                        ball.position.x *= 0.5
-                        ball.position.z *= 0.5
-                        break
-                    default:
-                        container_geometry = new THREE.BoxGeometry(params.container_r * 2, params.container_r * 2, params.container_r * 2)    
-                        break
-                }
-                
-                const container_material = new THREE.MeshPhysicalMaterial({  
-                    roughness: 0.01,  
-                    transmission: 0.8,  
-                    thickness: 0.5, // Add refraction!
                 })
-                container = new THREE.Mesh(container_geometry.toNonIndexed(), container_material)
-                container.position.y += params.container_r
-                scene.add(container)
+                plane = new THREE.Mesh( bg_geometry.toNonIndexed(), bg_material )
+                plane.rotation.set(-Math.PI / 2, 0, Math.PI)
+                plane.updateMatrix()
+                plane.geometry.applyMatrix4(plane.matrix)
+                plane.rotation.set(0, 0, 0)
+                plane.updateMatrix()
+                scene.add( plane )
+                
+                // Init particles
+                pts = []
+                pts_geo = new THREE.BufferGeometry()
+                pts_material = new THREE.PointsMaterial({
+                    size: pt_r,
+                    map: disc,
+                    transparent: true,
+                    vertexColors: true,
+                    alphaTest: 0.5,
+                })
+                
+                const particles = new THREE.Points(pts_geo, pts_material)
+                scene.add(particles)
+                
+                
+                // Load Statue
+                let statue_geo, statue_material
+                switch (params.statue_shape) {
+                    case "None":
+                        break
+                    
+                    case "Cone":
+                        statue_geo = new THREE.ConeGeometry(20, 30, 4)    
+                        statue_material = new THREE.MeshLambertMaterial( { color: 0xdd9911 } )
+                        statue = new THREE.Mesh(statue_geo.toNonIndexed(), statue_material)
+                        statue.scale.set(5, 5, 5)
+                        statue.position.y += 100
+                        statue.updateMatrix()
+                        statue.geometry.applyMatrix4(statue.matrix)
+                        statue.scale.set(1, 1, 1)
+                        statue.position.set(0, 0, 0)
+                        scene.add(statue)
+                        break
+                    
+                    case "Lathe":
+                        const points = [];
+                        for ( let i = 0; i < 6; i ++ ) {
+                            points.push( new THREE.Vector2( Math.sin( i * 0.2 ) * 6 + 3, ( i - 3 ) * 2 ) );
+                        }
+                        statue_geo = new THREE.LatheGeometry(points, 10);
+                        statue_material = new THREE.MeshLambertMaterial( { color: 0xdd9911, side: THREE.DoubleSide } )
+                        statue = new THREE.Mesh(statue_geo.toNonIndexed(), statue_material)
+                        statue.scale.set(6, 6, 6)
+                        statue.position.y += 100
+                        statue.updateMatrix()
+                        statue.geometry.applyMatrix4(statue.matrix)
+                        statue.scale.set(1, 1, 1)
+                        statue.position.set(0, 0, 0)
+                        scene.add(statue)
+                        break
 
-                // Add obstacle inside container
-                if (params.container_inobj) {
-                    const inobj_geometry = new THREE.OctahedronGeometry(params.container_r * 0.75)
-                    const inobj_material = new THREE.MeshLambertMaterial( { color: 0x77ff77 } )
-                    inobj = new THREE.Mesh(inobj_geometry.toNonIndexed(), inobj_material)
-                    inobj.position.y += params.container_r
-                    scene.add(inobj)
+                    case "Human":
+                        const loader = new OBJLoader();
+                        loader.load(
+                            // resource URL
+                            'assets/humanoid_quad.obj',
+
+                            // called when resource is loaded
+                            function ( object ) {
+                                statue = object.children[0].clone()
+                                statue.rotation.x -= Math.PI / 2
+                                statue.scale.set(15, 15, 15)
+                                statue.position.set(-25, -50, 0)
+                                statue.updateMatrix()
+                                statue.geometry.applyMatrix4(statue.matrix)
+                                statue.rotation.set(0, 0, 0)
+                                statue.position.set(0, 0, 0)
+                                statue.scale.set(1, 1, 1)
+                                statue.updateMatrix()
+                                scene.add( statue )
+                            },
+
+                            // called when loading is in progresses
+                            function ( xhr ) {
+                                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' )
+                            },
+
+                            // called when loading has errors
+                            function ( error ) {
+                                console.log('An error happened', error)
+                            }
+                        )
+                        break
                 }
                 
-                // Add ball
-                ball_r = params.ball_m * 10
-                const ball_geometry = new THREE.SphereGeometry(ball_r, 32, 16)
-                const ball_material = new THREE.MeshLambertMaterial( { color: 0x0000ff } )
-                ball = new THREE.Mesh( ball_geometry, ball_material )
-                ball_v = new THREE.Vector3(0, 0, 0)
-                if (params.container_inobj) {
-                    ball.position.y = params.container_r * 1.5
-                    ball.position.x = params.container_r * 0.5
-                    ball.position.z = -params.container_r * 0.5
-                    ball_v.set(-200 , 0, 200)
-                } else {
-                    ball.position.y = params.container_r * 1.5
-                    ball.position.x = (Math.random() - 0.5) * params.container_r * 1.5
-                    ball.position.z = (Math.random() - 0.5) * params.container_r * 1.5
-                }
-                
-                scene.add( ball )
-
                 
                 // Add stats and controls
                 stats = new Stats();
@@ -196,18 +249,18 @@
                 // Add GUI
                 const gui = new GUI()
                 
-                const folder1 = gui.addFolder("Physics");
-                folder1.add(params, "ball_m", 1, 5)
+                const folder1 = gui.addFolder("Environments");
                 folder1.add(params, "gravity", 0, 100)
 				folder1.add(params, "wind", 0, 200)
 				folder1.add(params, "c_r", 0, 0.9)
 				folder1.add(params, "c_f", 0, 1)
-                folder1.add(params, "render_fps", 1, 1 / clock.getDelta())
+                folder1.add(params, "statue_shape", statue_shapes)
 
-                const folder2 = gui.addFolder("Container")
-                folder2.add(params, "container_r", 50, 300)
-                folder2.add(params, "container_shape", shape_types)
-                folder2.add(params, "container_inobj")
+                const folder2 = gui.addFolder("Particles")
+                folder2.add(params, "new_pts_num", 1, 500)
+                folder2.add(params, "max_pts_num", 1000, 100000)
+                folder2.add(params, "generator2")
+                folder2.add(params, "generator3")
                 folder2.add(params, "Reset")
 
 				folder1.open()
@@ -217,15 +270,10 @@
 			function animate() {
 				requestAnimationFrame( animate )
 
-                delta += clock.getDelta()
-                const interval = 1 / params.render_fps
+                const h = clock.getDelta()
+                render(h)
+                h_count = (h_count + h) % (2 * Math.PI)
 
-                if (delta > interval && !stop) {
-                    render(interval);
-                    delta = delta % interval
-                    // stop = true
-                }
-                
                 controls.update()
 				renderer.render( scene, camera )
                 stats.update()
@@ -233,112 +281,189 @@
 
             function render(h) {
 
-                let container_faces = getFaces(container)
-                if (params.container_inobj) {
-                    container_faces = container_faces.concat(getFaces(inobj, true))
+                wind = wind_dir.clone()
+                wind.multiplyScalar(params.wind)
+
+                updateSources(h)
+                updateParticles(h)
+                addParticles(pts_src1)
+                
+                if (params.generator2) {
+                    addParticles(pts_src2)
+                }
+                if (params.generator3) {
+                    addParticles(pts_src3)
                 }
 
-                let ball_v_old = ball_v.clone()
-                let ball_old = ball.clone()
-                // let still_flag = false
+                updateGeo()
+            }
 
-                const acc = gravity.clone()
-                acc.addScaledVector(ball_v, -air_resitance / params.ball_m)
-                acc.addScaledVector(wind, 1 / params.ball_m)
+            function updateSources(h) {
+                const t1 = Math.sin(h_count)
+                const t2 = Math.cos(h_count)
+                pts_src1.pos.x += t1 / 2
+                pts_src1.pos.y += t1
+                pts_src1.pos.z += t2
                 
-                ball_v.addScaledVector(acc, h)
-                ball.position.addScaledVector(ball_v, h)
+                if (params.generator2) {
+                    pts_src2.pos.x += t2 / 2
+                    pts_src2.pos.y += t2
+                    pts_src2.pos.z += t1
+                }
 
-                while (h > 0) {
+                if (params.generator3) {
+                    pts_src3.pos.x += t2 / 2
+                    pts_src3.pos.y += t2
+                    pts_src3.pos.z += t1
+                }
+                
+            }
 
-                    // Collision detection
-                    const move = ball.position.clone().sub(ball_old.position)
-                    let collision_flag = false
-                    let nearest_face_id = 0
-                    let nearest_face_h = 1
+            function updateParticles(h) {
+                
+                // Remove dead pts
+                for (let p of pts) {
+                    p.life -= h
+                }
+
+                pts = pts.filter(p => {return p.life > 0})
+                
+                // Get boundary faces
+                let boundary_faces = getFaces(plane, true)
+                if (statue) {
+                    boundary_faces = boundary_faces.concat(getFaces(statue, true))
+                    if (params.statue_shape == "Lathe") {
+                        boundary_faces = boundary_faces.concat(getFaces(statue, false))
+                    }
                     
-                    for (let i = 0; i < container_faces.length; i++) {
-                        const tri = container_faces[i]
+                }
+                face_len = boundary_faces.length
+                // console.log(plane, boundary_faces)
+
+                // Update pts position
+                for (let p of pts) {
+
+                    const acc = gravity.clone()
+                    acc.addScaledVector(p.velocity, -air_resitance)
+                    acc.addScaledVector(wind, 1)
+
+                    let velocity_old = p.velocity.clone()
+                    let pos_old = p.pos.clone()
+                    p.velocity.addScaledVector(acc, h)
+                    p.pos.addScaledVector(p.velocity, h)
+                    
+                    let h_rest = h
+
+                    while (h_rest > 0) {
+
+                        // Collision detection
+                        const move = p.pos.clone().sub(pos_old)
+                        let collision_flag = false
+                        let nearest_face_tri = null
+                        let nearest_face_h = 1
                         
-                        const n = new THREE.Vector3()
-                        tri.getNormal(n)
-                        
-                        const scalar_old = tri.a.clone().sub(ball_old.position).dot(n) - ball_r
-                        const scalar_new = tri.a.clone().sub(ball.position).dot(n) - ball_r
-                        const fraction = scalar_old / (scalar_old - scalar_new)
-                        
-                        // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
-                        // console.log("subtract", tri.a.clone().sub(ball_old.position))
-                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                        for (let tri of boundary_faces) {
+                            const n = new THREE.Vector3()
+                            tri.getNormal(n)
                             
-                            const p_on_plane = ball_old.position.clone()
-                            p_on_plane.addScaledVector(move, fraction)
+                            const scalar_old = tri.a.clone().sub(pos_old).dot(n) - pt_r
+                            const scalar_new = tri.a.clone().sub(p.pos).dot(n) - pt_r
+                            const fraction = scalar_old / (scalar_old - scalar_new)
                             
-                            // console.log("p on plane", p_on_plane)
-                            if (!tri.containsPoint(p_on_plane)) continue
-                            
-                            if (nearest_face_h > fraction) {
-                                nearest_face_h = fraction
-                                nearest_face_id = i
+                            // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
+                            // console.log("subtract", tri.a.clone().sub(ball_old.position))
+                            if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                                
+                                const p_on_plane = pos_old.clone()
+                                p_on_plane.addScaledVector(move, fraction)
+                                
+                                // console.log("p on plane", p_on_plane)
+                                if (!tri.containsPoint(p_on_plane)) continue
+                                
+                                if (nearest_face_h > fraction) {
+                                    nearest_face_h = fraction
+                                    nearest_face_tri = tri
+                                }
+                                collision_flag = true
                             }
-                            collision_flag = true
+                        }
+
+                        // Process collision and response
+                        if (collision_flag) {
+                            const n = new THREE.Vector3()
+                            nearest_face_tri.getNormal(n)
+                            
+                            const p_on_plane = pos_old.clone()
+                            const fraction = nearest_face_h
+                            p_on_plane.addScaledVector(move, fraction)
+
+                            // Update remaining timestamp
+                            h_rest -= fraction * h_rest
+
+                            // Compute velocity after bouncing
+                            const pt_v_scalar = p.velocity.clone().dot(n)
+                            let new_v_n = n.clone().multiplyScalar(pt_v_scalar)
+                            let new_v_t = p.velocity.clone().sub(new_v_n)
+
+                            // Add velocity response restriction
+                            new_v_n.multiplyScalar(params.c_r).negate()
+                            new_v_t.multiplyScalar(1 - params.c_f)
+                            p.velocity.addVectors(new_v_n, new_v_t)
+                            
+                            // Update ball position
+                            p.pos.set(p_on_plane.x, p_on_plane.y, p_on_plane.z)
+                            pos_old = p.pos.clone()
+                            p.pos.addScaledVector(p.velocity, h)
+
+                        } else {
+                            break
                         }
                     }
 
-                    // console.log("collision", collision_flag, nearest_face_id, container_faces[nearest_face_id], "fraction", nearest_face_h)
-
-                    // Process collision and response
-                    if (collision_flag) {
-                        const tri = container_faces[nearest_face_id]
-                        
-                        const n = new THREE.Vector3()
-                        tri.getNormal(n)
-                        
-                        const p_on_plane = ball_old.position.clone()
-                        const fraction = nearest_face_h
-                        p_on_plane.addScaledVector(move, fraction)
-
-                        // Update remaining timestamp
-                        h -= fraction * h
-
-                        // Compute velocity after bouncing
-                        const ball_v_scalar = ball_v.clone().dot(n)
-                        let new_v_n = n.clone().multiplyScalar(ball_v_scalar)
-                        let new_v_t = ball_v.clone().sub(new_v_n)
-
-                        // Add velocity response restriction
-                        new_v_n.multiplyScalar(params.c_r).negate()
-                        new_v_t.multiplyScalar(1 - params.c_f)
-                        ball_v_old = ball_v.clone()
-                        ball_v = new THREE.Vector3()
-                        ball_v.addVectors(new_v_n, new_v_t)
-                        
-                        // Update ball position
-                        ball.position.set(p_on_plane.x, p_on_plane.y, p_on_plane.z)
-                        ball_old = ball.clone() 
-                        ball.position.addScaledVector(ball_v, h)
-
-                        // console.log("velocity", ball_v, new_v_n, new_v_t)
-                        // console.log("timestamp", h, "fraction", fraction)
-                        // console.log("position", ball_old.position, ball.position)
-
-                        // if (ball.position.distanceTo(ball_old.position) < 1e-3) {
-                            // still_flag = true
-                        // }
-
-                        // console.log("sitll flag", still_flag)
-                    } else {
-                        break
-                    }
-
                 }
-                
-                    
+
             }
 
-            // function getVertex(vertices, idx) {
-            //     return new THREE.Vector3(vertices.getX(idx), vertices.getY(idx), vertices.getZ(idx))
-            // }
+            function addParticles(pts_src) {
+                const new_pts_num = Math.min(params.new_pts_num, params.max_pts_num - pts.length)
+                for (let i = 0; i < new_pts_num; i++) {
+                    const c_random = Math.random() / 2
+                    pts.push({
+                        pos: new THREE.Vector3(
+                            pts_src.pos.x + Math.random() * 40, 
+                            pts_src.pos.y + Math.random() * 40, 
+                            pts_src.pos.z + Math.random() * 40),
+                        color: new THREE.Color(
+                            c_random + pts_src.color.r, 
+                            c_random + pts_src.color.g,
+                            c_random + pts_src.color.b),
+                        life: 7,
+                        velocity: pts_src.velocity.clone()
+                    })
+                }
+
+                document.getElementById("info").innerHTML = "#Particles: " + pts.length + "&nbsp;&nbsp;&nbsp;&nbsp; #Bouncing Faces: " + face_len
+            }
+
+            function updateGeo() {
+                const pos_list = []
+                const color_list = []
+                const size_list = []
+
+                for (let p of pts) {
+                    pos_list.push(p.pos.x, p.pos.y, p.pos.z)
+                    color_list.push(p.color.r, p.color.g, p.color.b)
+                    size_list.push(p.size)
+                }
+
+                pts_geo.setAttribute('position', new THREE.Float32BufferAttribute(pos_list, 3))
+                pts_geo.setAttribute('color', new THREE.Float32BufferAttribute(color_list, 3))
+                pts_geo.setAttribute('size', new THREE.Float32BufferAttribute(size_list, 1))
+
+                pts_geo.attributes.position.needsUpdate = true
+                pts_geo.attributes.color.needsUpdate = true
+                pts_geo.attributes.size.needsUpdate = true
+            }
 
             function getFaces(mesh, invert_normal=false) {
                 const vertices = mesh.geometry.getAttribute("position")

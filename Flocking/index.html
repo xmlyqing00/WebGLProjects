@@ -2,7 +2,7 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>Particles</title>
+		<title>Flocking</title>
         <link type="text/css" rel="stylesheet" href="style.css">
 	</head>
 	<body>
@@ -44,18 +44,8 @@
             const pt_r = 4
             let plane, statue
             let pts, pts_geo, pts_material
-            const pts_src1 = {
-                pos: new THREE.Vector3(150, 100, 0),
-                velocity: new THREE.Vector3(-100, 0, 0),
-                color: new THREE.Color(0.75, 0.25, 0.5)
-            }
-            const pts_src2 = {
-                pos: new THREE.Vector3(-150, 120, 0),
-                velocity: new THREE.Vector3(100, 0, 0),
-                color: new THREE.Color(0.5, 0.75, 0.5)
-            }
 
-            const pts_src3 = {
+            const pts_src = {
                 pos: new THREE.Vector3(-50, 100, 100),
                 velocity: new THREE.Vector3(50, 0, -150),
                 color: new THREE.Color(0.2, 0.6, 0.8)
@@ -66,15 +56,8 @@
             // GUI params
             const canvas = document.querySelector("#container")
             const params = {
-                gravity: 40,                // Gravity
-                wind: 1,                   // Wind strong
-				c_r: 0.6,                   // response restriction
-				c_f: 0.05,                   // friction restriction
-                max_pts_num: 10000,
-                new_pts_num: 10,
+                pts_num: 1000,
                 statue_shape: 'None',     // Container shape
-                generator2: false,
-                generator3: false,
 				Reset: function () {
                     renderer.domElement.remove()
                     statue = null
@@ -117,19 +100,6 @@
                 light_point2.position.set( -200, 200, 300 )
                 scene.add(light_point2)
                 
-                // Set physics values
-                gravity_dir = new THREE.Vector3(0, -1, 0)  // gravity in (x, y, z)
-
-                // Set wind
-                wind_dir = new THREE.Vector3().random().subScalar(0.5)
-                // wind.y = 0
-                wind_dir.normalize()
-                
-                const wind_origin = new THREE.Vector3( 100, 100, -300)
-                const wind_len = 100
-                const arrowHelper = new THREE.ArrowHelper( wind_dir, wind_origin, wind_len, 0xffff00 )
-                scene.add( arrowHelper )
-
                 // Add plane
                 const bg_geometry = new THREE.PlaneGeometry(1000, 550);
                 const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
@@ -147,6 +117,21 @@
                 
                 // Init particles
                 pts = []
+                for (let i = 0; i < params.pts_num; i++) {
+                    const c_random = Math.random() / 2
+                    pts.push({
+                        pos: new THREE.Vector3(
+                            pts_src.pos.x + Math.random() * 40, 
+                            pts_src.pos.y + Math.random() * 40, 
+                            pts_src.pos.z + Math.random() * 40),
+                        color: new THREE.Color(
+                            c_random + pts_src.color.r, 
+                            c_random + pts_src.color.g,
+                            c_random + pts_src.color.b),
+                        velocity: pts_src.velocity.clone()
+                    })
+                }
+
                 pts_geo = new THREE.BufferGeometry()
                 pts_material = new THREE.PointsMaterial({
                     size: pt_r,
@@ -158,77 +143,6 @@
                 
                 const particles = new THREE.Points(pts_geo, pts_material)
                 scene.add(particles)
-                
-                
-                // Load Statue
-                let statue_geo, statue_material
-                switch (params.statue_shape) {
-                    case "None":
-                        break
-                    
-                    case "Cone":
-                        statue_geo = new THREE.ConeGeometry(20, 30, 4)    
-                        statue_material = new THREE.MeshLambertMaterial( { color: 0xdd9911 } )
-                        statue = new THREE.Mesh(statue_geo.toNonIndexed(), statue_material)
-                        statue.scale.set(5, 5, 5)
-                        statue.position.y += 100
-                        statue.updateMatrix()
-                        statue.geometry.applyMatrix4(statue.matrix)
-                        statue.scale.set(1, 1, 1)
-                        statue.position.set(0, 0, 0)
-                        scene.add(statue)
-                        break
-                    
-                    case "Lathe":
-                        const points = [];
-                        for ( let i = 0; i < 6; i ++ ) {
-                            points.push( new THREE.Vector2( Math.sin( i * 0.2 ) * 6 + 3, ( i - 3 ) * 2 ) );
-                        }
-                        statue_geo = new THREE.LatheGeometry(points, 10);
-                        statue_material = new THREE.MeshLambertMaterial( { color: 0xdd9911, side: THREE.DoubleSide } )
-                        statue = new THREE.Mesh(statue_geo.toNonIndexed(), statue_material)
-                        statue.scale.set(8, 8, 8)
-                        statue.position.y += 100
-                        statue.updateMatrix()
-                        statue.geometry.applyMatrix4(statue.matrix)
-                        statue.scale.set(1, 1, 1)
-                        statue.position.set(0, 0, 0)
-                        scene.add(statue)
-                        break
-
-                    case "Human":
-                        const loader = new OBJLoader();
-                        loader.load(
-                            // resource URL
-                            'assets/humanoid_quad.obj',
-
-                            // called when resource is loaded
-                            function ( object ) {
-                                statue = object.children[0].clone()
-                                statue.rotation.x -= Math.PI / 2
-                                statue.scale.set(15, 15, 15)
-                                statue.position.set(-25, -50, 0)
-                                statue.updateMatrix()
-                                statue.geometry.applyMatrix4(statue.matrix)
-                                statue.rotation.set(0, 0, 0)
-                                statue.position.set(0, 0, 0)
-                                statue.scale.set(1, 1, 1)
-                                statue.updateMatrix()
-                                scene.add( statue )
-                            },
-
-                            // called when loading is in progresses
-                            function ( xhr ) {
-                                console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' )
-                            },
-
-                            // called when loading has errors
-                            function ( error ) {
-                                console.log('An error happened', error)
-                            }
-                        )
-                        break
-                }
                 
                 
                 // Add stats and controls
@@ -246,21 +160,13 @@
                 // Add GUI
                 const gui = new GUI()
                 
-                const folder1 = gui.addFolder("Environments");
-                folder1.add(params, "gravity", 0, 200)
-				folder1.add(params, "wind", 0, 200)
-				folder1.add(params, "c_r", 0, 0.9)
-				folder1.add(params, "c_f", 0, 1)
-                folder1.add(params, "statue_shape", statue_shapes)
-
                 const folder2 = gui.addFolder("Particles")
-                folder2.add(params, "new_pts_num", 1, 3000)
-                folder2.add(params, "max_pts_num", 1000, 500000)
-                folder2.add(params, "generator2")
-                folder2.add(params, "generator3")
+                // folder2.add(params, "", 1, 3000)
+                // folder2.add(params, "max_pts_num", 1000, 500000)
+                // folder2.add(params, "generator2")
+                // folder2.add(params, "generator3")
                 folder2.add(params, "Reset")
 
-				folder1.open()
                 folder2.open()
             }
 
@@ -278,54 +184,18 @@
 
             function render(h) {
 
-                wind = wind_dir.clone()
-                wind.multiplyScalar(params.wind)
-                gravity = gravity_dir.clone()
-                gravity.multiplyScalar(params.gravity)
+                // wind = wind_dir.clone()
+                // wind.multiplyScalar(params.wind)
+                // gravity = gravity_dir.clone()
+                // gravity.multiplyScalar(params.gravity)
 
-                updateSources(h)
+                // updateSources(h)
                 updateParticles(h)
-                addParticles(pts_src1)
-                
-                if (params.generator2) {
-                    addParticles(pts_src2)
-                }
-                if (params.generator3) {
-                    addParticles(pts_src3)
-                }
-
                 updateGeo()
-            }
-
-            function updateSources(h) {
-                const t1 = Math.sin(h_count)
-                const t2 = Math.cos(h_count)
-                pts_src1.pos.x += t1 / 2
-                pts_src1.pos.y += t1
-                pts_src1.pos.z += t2
-                
-                if (params.generator2) {
-                    pts_src2.pos.x += t2 / 2
-                    pts_src2.pos.y += t2
-                    pts_src2.pos.z += t1
-                }
-
-                if (params.generator3) {
-                    pts_src3.pos.x += t2 / 2
-                    pts_src3.pos.y += t2
-                    pts_src3.pos.z += t1
-                }
-                
             }
 
             function updateParticles(h) {
                 
-                // Remove dead pts
-                for (let p of pts) {
-                    p.life -= h
-                }
-
-                pts = pts.filter(p => {return p.life > 0})
                 
                 // Get boundary faces
                 let boundary_faces = getFaces(plane, true)
@@ -422,27 +292,6 @@
 
                 }
 
-            }
-
-            function addParticles(pts_src) {
-                const new_pts_num = Math.min(params.new_pts_num, params.max_pts_num - pts.length)
-                for (let i = 0; i < new_pts_num; i++) {
-                    const c_random = Math.random() / 2
-                    pts.push({
-                        pos: new THREE.Vector3(
-                            pts_src.pos.x + Math.random() * 40, 
-                            pts_src.pos.y + Math.random() * 40, 
-                            pts_src.pos.z + Math.random() * 40),
-                        color: new THREE.Color(
-                            c_random + pts_src.color.r, 
-                            c_random + pts_src.color.g,
-                            c_random + pts_src.color.b),
-                        life: 7,
-                        velocity: pts_src.velocity.clone()
-                    })
-                }
-
-                document.getElementById("info").innerHTML = "#Particles: " + pts.length + "&nbsp;&nbsp;&nbsp;&nbsp; #Bouncing Faces: " + face_len
             }
 
             function updateGeo() {

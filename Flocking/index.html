@@ -57,12 +57,12 @@
             const params = {
                 pts_num: 300,
                 k_avoid: 10,
-                k_vmatch: 0.1,
+                k_vmatch: 10,
                 k_center: 1,
                 r1: 3,
                 r2: 30,
-                obstacles: false,
-                moving: false,
+                obstacles: true,
+                moving: true,
 				Reset: function () {
                     renderer.domElement.remove()
                     init()

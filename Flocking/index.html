@@ -113,72 +113,97 @@
                 plane.rotation.set(0, 0, 0)
                 plane.updateMatrix()
                 scene.add( plane )
-                
-                // Init particles
-                pts = []
-                for (let i = 0; i < params.pts_num; i++) {
-                    const c_random = Math.random() / 2
-                    pts.push({
-                        pos: new THREE.Vector3(
-                            Math.random() * 200 - 100, 
-                            Math.random() * 200 + 100, 
-                            Math.random() * 200 - 100),
-                        color: new THREE.Color(
-                            c_random + pts_color.r, 
-                            c_random + pts_color.g,
-                            c_random + pts_color.b),
-                        velocity: new THREE.Vector3(
-                            Math.random() * 100,
-                            Math.random() * 100,
-                            Math.random() * 100
-                        )
-                    })
-                }
 
-                pts_geo = new THREE.BufferGeometry()
-                pts_material = new THREE.PointsMaterial({
-                    size: pt_r,
-                    map: disc,
-                    transparent: true,
-                    vertexColors: true,
-                    alphaTest: 0.5,
-                })
+                // Add cloth
+                const cloth_w = 5
+                const cloth_h = 5
+                const cloth_segment_w = 5 * cloth_w
+                const cloth_segment_h = 5 * cloth_h
                 
-                const particles = new THREE.Points(pts_geo, pts_material)
-                scene.add(particles)
+                const cloth_geo = new THREE.PlaneGeometry(cloth_w, cloth_h, cloth_segment_w, cloth_segment_h)
+                
+                const cloth_material = new THREE.MeshLambertMaterial({
+                    color: 0xffffff, 
+                    side: THREE.DoubleSide
+                })
+                cloth = new THREE.Mesh(cloth_geo, cloth_material)
+				cloth.castShadow = true
+				cloth.receiveShadow = true
+				scene.add(cloth)
+				textureLoader.load('assets/grid.png', function (texture) {
+					texture.wrapS = THREE.RepeatWrapping
+					texture.wrapT = THREE.RepeatWrapping
+					texture.repeat.set(cloth_segment_w, cloth_segment_h)
+					cloth.material.map = texture
+					cloth.material.needsUpdate = true
+				})
+
+                
+                // // Init particles
+                // pts = []
+                // for (let i = 0; i < params.pts_num; i++) {
+                //     const c_random = Math.random() / 2
+                //     pts.push({
+                //         pos: new THREE.Vector3(
+                //             Math.random() * 200 - 100, 
+                //             Math.random() * 200 + 100, 
+                //             Math.random() * 200 - 100),
+                //         color: new THREE.Color(
+                //             c_random + pts_color.r, 
+                //             c_random + pts_color.g,
+                //             c_random + pts_color.b),
+                //         velocity: new THREE.Vector3(
+                //             Math.random() * 100,
+                //             Math.random() * 100,
+                //             Math.random() * 100
+                //         )
+                //     })
+                // }
+
+                // pts_geo = new THREE.BufferGeometry()
+                // pts_material = new THREE.PointsMaterial({
+                //     size: pt_r,
+                //     map: disc,
+                //     transparent: true,
+                //     vertexColors: true,
+                //     alphaTest: 0.5,
+                // })
+                
+                // const particles = new THREE.Points(pts_geo, pts_material)
+                // scene.add(particles)
                 
                 // Add obstacles
-                if (params.obstacles) {
+                // if (params.obstacles) {
                     
-                    const pos_range = 200
-                    const pos_range_half = pos_range / 2
+                //     const pos_range = 200
+                //     const pos_range_half = pos_range / 2
                     
-                    for (let i = 0; i < obstacles_num; i++) {
-                        const size = Math.random() * 10 + 60
-                        let obstacle_geo
-                        if (i % 2 == 0) {
-                            obstacle_geo = new THREE.BoxGeometry(size, size, size)
+                //     for (let i = 0; i < obstacles_num; i++) {
+                //         const size = Math.random() * 10 + 60
+                //         let obstacle_geo
+                //         if (i % 2 == 0) {
+                //             obstacle_geo = new THREE.BoxGeometry(size, size, size)
                             
-                        } else {
-                            obstacle_geo = new THREE.SphereGeometry(size)
-                        }
-                        const obstacle_material = new THREE.MeshLambertMaterial( { color: 0xddbb66 } )
-                        const obstacle = new THREE.Mesh(obstacle_geo.toNonIndexed(), obstacle_material)
+                //         } else {
+                //             obstacle_geo = new THREE.SphereGeometry(size)
+                //         }
+                //         const obstacle_material = new THREE.MeshLambertMaterial( { color: 0xddbb66 } )
+                //         const obstacle = new THREE.Mesh(obstacle_geo.toNonIndexed(), obstacle_material)
                         
-                        obstacle.position.set(
-                            Math.random() * pos_range - pos_range, 
-                            Math.random() * pos_range + pos_range_half / 2, 
-                            i * pos_range - pos_range_half
-                        )
-                        obstacles.push({
-                            size: size,
-                            mesh: obstacle,
-                            move: new THREE.Vector3(Math.random() + 1, Math.random() + 1, 0)
-                        })
+                //         obstacle.position.set(
+                //             Math.random() * pos_range - pos_range, 
+                //             Math.random() * pos_range + pos_range_half / 2, 
+                //             i * pos_range - pos_range_half
+                //         )
+                //         obstacles.push({
+                //             size: size,
+                //             mesh: obstacle,
+                //             move: new THREE.Vector3(Math.random() + 1, Math.random() + 1, 0)
+                //         })
                         
-                        scene.add(obstacle)
-                    }
-                }
+                //         scene.add(obstacle)
+                //     }
+                // }
 
                 // Add stats and controls
                 stats = new Stats();

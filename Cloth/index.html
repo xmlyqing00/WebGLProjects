@@ -25,34 +25,33 @@
             import * as THREE from "three"
             import Stats from "three/addons/libs/stats.module.js"
             import { TrackballControls } from "three/addons/controls/TrackballControls.js"
-            import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-            import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js';
-            import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js';
+            import { GUI } from 'three/addons/libs/lil-gui.module.min.js'
+            import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js'
+            import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js'
 
             // Simulater variables
             let camera, scene, renderer, controls, stats
             const clock = new THREE.Clock()
             let h_count = 0
             let face_len = 0
-
-            const gravity = -9.8
-
             
             // Physic variables
             const air_resitance = 0.01
-            const boundary_center = new THREE.Vector3(0, 250, 0)
-            const boundary_r = 220
-
-            const acc_max = 2000
-            const obstacles_num = 3
-            let obstacles = []
+            const gravity = -9.8
+            const spring = 10
+            const damping = 1
 
             // Object variables
-            const pt_r = 10
             let plane
-            let pts, pts_geo, pts_material
-            const pts_color = new THREE.Color(0.2, 0.6, 0.8)
-            const disc = new THREE.TextureLoader().load("assets/disc.png")
+            
+            let cloth, cloth_geo, cloth_corners
+            let cloth_pos = new THREE.Vector3(0, 10, 0)
+            let cloth_move = 0
+            let cloth_dense = 10
+            const node_num = (cloth_dense + 1) ** 2
+            let node_v = []
+            let cloth_edges = []
+            const cloth_mass = 2
             
             // GUI params
             const canvas = document.querySelector("#container")
@@ -79,9 +78,9 @@
 
                 // Init scene
                 scene = new THREE.Scene()
-                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 2000 )
-                camera.position.z = -250
-                camera.position.y = 500
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 1000 )
+                camera.position.z = -20
+                camera.position.y = 30
                 camera.position.x = 0
 
                 renderer = new THREE.WebGLRenderer({alpha: true})
@@ -102,7 +101,7 @@
                 scene.add(light_point2)
                 
                 // Add plane
-                const bg_geometry = new THREE.PlaneGeometry(1000, 550);
+                const bg_geometry = new THREE.PlaneGeometry(100, 50);
                 const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
                 const bg_material = new THREE.MeshBasicMaterial({
                     // side: THREE.DoubleSide,
@@ -116,77 +115,75 @@
                 plane.updateMatrix()
                 scene.add( plane )
                 
-                // Init particles
-                pts = []
-                for (let i = 0; i < params.pts_num; i++) {
-                    const c_random = Math.random() / 2
-                    pts.push({
-                        pos: new THREE.Vector3(
-                            Math.random() * 200 - 100, 
-                            Math.random() * 200 + 100, 
-                            Math.random() * 200 - 100),
-                        color: new THREE.Color(
-                            c_random + pts_color.r, 
-                            c_random + pts_color.g,
-                            c_random + pts_color.b),
-                        velocity: new THREE.Vector3(
-                            Math.random() * 100,
-                            Math.random() * 100,
-                            Math.random() * 100
-                        )
-                    })
-                }
-
-                pts_geo = new THREE.BufferGeometry()
-                pts_material = new THREE.PointsMaterial({
-                    size: pt_r,
-                    map: disc,
-                    transparent: true,
-                    vertexColors: true,
-                    alphaTest: 0.5,
+                // Add cloth
+                const cloth_w = 20
+                const cloth_h = 20
+                cloth_corners = [0, cloth_dense, node_num - 1 - cloth_dense, node_num - 1]
+                
+                cloth_geo = new THREE.PlaneGeometry(cloth_w, cloth_h, cloth_dense, cloth_dense)
+                cloth_geo.rotateX( Math.PI * 0.5 )
+				cloth_geo.translate( cloth_pos.x, cloth_pos.y, cloth_pos.z)
+                const cloth_material = new THREE.MeshLambertMaterial({
+                    color: 0x75c3eb, 
+                    side: THREE.DoubleSide
                 })
-                
-                const particles = new THREE.Points(pts_geo, pts_material)
-                scene.add(particles)
-                
-                // Add obstacles
-                if (params.obstacles) {
-                    
-                    const pos_range = 200
-                    const pos_range_half = pos_range / 2
-                    
-                    for (let i = 0; i < obstacles_num; i++) {
-                        const size = Math.random() * 10 + 60
-                        let obstacle_geo
-                        if (i % 2 == 0) {
-                            obstacle_geo = new THREE.BoxGeometry(size, size, size)
-                            
-                        } else {
-                            obstacle_geo = new THREE.SphereGeometry(size)
+                cloth = new THREE.Mesh(cloth_geo, cloth_material)
+				cloth.castShadow = true
+				cloth.receiveShadow = true
+				scene.add(cloth)
+				new THREE.TextureLoader().load("assets/grid.png", function (texture) {
+					texture.wrapS = THREE.RepeatWrapping
+					texture.wrapT = THREE.RepeatWrapping
+					texture.repeat.set(cloth_dense, cloth_dense)
+					cloth.material.map = texture
+					cloth.material.needsUpdate = true
+				})
+
+                const dirs = [[0, 1], [1, 1], [1, 0], [1, -1]]
+                for (let p0 = 0; i < cloth_dense; i++) {
+                    for (let p1 = 0; j < cloth_dense; j++ ) {
+                        for (let dir of dirs) {
+                            const q0 = p0 + dir[0]
+                            const q1 = p1 + dir[1]
+                            if (q0 < 0 || q0 >= cloth_dense || q1 < 0 || q1 >= cloth_dense) {
+                                continue
+                            }
+
+                            const pid = p0 * cloth_dense + p1
+                            const qid = q0 * cloth_dense + q1
+
+                            const ppos = node_pos[pid]
+                            const qpos = node_pos[qid]
+                            const l = ppos.distanceTo(qpos)
+                            cloth_edges.push({
+                                v0: pid,
+                                v1: qid,
+                                l0 = l
+                            })
                         }
-                        const obstacle_material = new THREE.MeshLambertMaterial( { color: 0xddbb66 } )
-                        const obstacle = new THREE.Mesh(obstacle_geo.toNonIndexed(), obstacle_material)
-                        
-                        obstacle.position.set(
-                            Math.random() * pos_range - pos_range, 
-                            Math.random() * pos_range + pos_range_half / 2, 
-                            i * pos_range - pos_range_half
-                        )
-                        obstacles.push({
-                            size: size,
-                            mesh: obstacle,
-                            move: new THREE.Vector3(Math.random() + 1, Math.random() + 1, 0)
-                        })
-                        
-                        scene.add(obstacle)
                     }
                 }
-
+                
                 // Add stats and controls
                 stats = new Stats();
-				canvas.appendChild( stats.dom );
+				canvas.appendChild( stats.dom )
 
-				window.addEventListener( "resize", onWindowResize );
+				window.addEventListener('resize', onWindowResize)
+
+                window.addEventListener('keydown', function ( event ) {
+                    switch ( event.keyCode ) {
+                        case 81: // Q
+                            cloth_move = 1
+                            break
+                        case 65: // A
+                            cloth_move = - 1
+                    }
+                })
+
+                window.addEventListener('keyup', function () {
+                    cloth_move = 0
+                })
+
 
                 controls = new TrackballControls(camera, renderer.domElement);
                 controls.dynamicDampingFactor = 0.5;
@@ -195,18 +192,18 @@
                 controls.panSpeed = 3;
                 
                 // Add GUI
-                const gui = new GUI()
-                gui.add(params, 'pts_num', 1, 500)
-                gui.add(params, 'k_avoid', 0, 50)
-                gui.add(params, 'k_vmatch', 0, 30)
-                gui.add(params, 'k_center', 0, 30)
-                gui.add(params, 'r1', 0, 100)
-                gui.add(params, 'r2', 0, 100)
-                gui.add(params, 'obstacles')
-                gui.add(params, 'moving')
-                gui.add(params, "Reset")
+                // const gui = new GUI()
+                // gui.add(params, 'pts_num', 1, 500)
+                // gui.add(params, 'k_avoid', 0, 50)
+                // gui.add(params, 'k_vmatch', 0, 30)
+                // gui.add(params, 'k_center', 0, 30)
+                // gui.add(params, 'r1', 0, 100)
+                // gui.add(params, 'r2', 0, 100)
+                // gui.add(params, 'obstacles')
+                // gui.add(params, 'moving')
+                // gui.add(params, "Reset")
 
-                gui.open()
+                // gui.open()
                 
             }
 
@@ -214,7 +211,7 @@
 				requestAnimationFrame( animate )
 
                 const h = clock.getDelta()
-                if (h_count < 3000) {
+                if (h_count < 30) {
                     render(h)
                 }
                 
@@ -226,12 +223,52 @@
 			}
 
             function render(h) {
-                if (params.obstacles && params.moving) {
-                    updateObstacles(h)
+
+                updateObjects(h)
+
+                // update
+                // if (params.obstacles && params.moving) {
+                //     updateObstacles(h)
+                // }
+                
+                // updateParticles(h)
+                // updateGeo()
+            }
+
+            function updateObjects() {
+                const node_pos = cloth_geo.getAttribute('position')
+                const face_idx = cloth_geo.getIndex()
+                
+                const cloth_corners_pos = []
+                for (let i = 0; i < 4; i++) {
+                    const corner_idx = cloth_corners[i]
+                    cloth_corners_pos.push([node_pos.getX(corner_idx), node_pos.getY(corner_idx), node_pos.getZ(corner_idx)])
+                }
+
+                const node_fn = new Array(node_num).fill(new THREE.Vector3(0, 0, 0))
+                const node_vn = new Array(node_num).fill(new THREE.Vector3(0, 0, 0))
+
+                for (let e of cloth_edges) {
+                    const p0 = node_pos[e.v0]
+                    const p1 = node_pos[e.v1]
+                    const x01 = p1.clone().sub(p0)
+                    const l = x01.length()
+                    x01.normalize()
+                    x01.multiplyScalar(spring * (l - e.l0))
+
+                }
+
+                console.log(face_idx)
+                
+                for (let i = 0; i < 4; i++) {
+                    const corner_idx = cloth_corners[i]
+                    pos.setX(corner_idx, cloth_corners_pos[i][0])
+                    pos.setY(corner_idx, cloth_corners_pos[i][1] + cloth_move * 0.02)
+                    pos.setZ(corner_idx, cloth_corners_pos[i][2])
                 }
                 
-                updateParticles(h)
-                updateGeo()
+                cloth_geo.setAttribute('position', pos)
+                cloth_geo.attributes.position.needsUpdate = true
             }
 
             function updateObstacles(h) {
@@ -349,29 +386,35 @@
             }
 
             function updateGeo() {
-                const pos_list = []
-                const color_list = []
-                const size_list = []
 
-                for (let p of pts) {
-                    pos_list.push(p.pos.x, p.pos.y, p.pos.z)
-                    color_list.push(p.color.r, p.color.g, p.color.b)
-                    size_list.push(p.size)
-                }
+                const pos = cloth.geometry.getAttribute('position')
+                const y0 = pos.getY()
+                pos.setY(10)
 
-                pts_geo.setAttribute('position', new THREE.Float32BufferAttribute(pos_list, 3))
-                pts_geo.setAttribute('color', new THREE.Float32BufferAttribute(color_list, 3))
-                pts_geo.setAttribute('size', new THREE.Float32BufferAttribute(size_list, 1))
+                // const pos_list = []
+                // const color_list = []
+                // const size_list = []
 
-                pts_geo.attributes.position.needsUpdate = true
-                pts_geo.attributes.color.needsUpdate = true
-                pts_geo.attributes.size.needsUpdate = true
+                // for (let p of pts) {
+                //     pos_list.push(p.pos.x, p.pos.y, p.pos.z)
+                //     color_list.push(p.color.r, p.color.g, p.color.b)
+                //     size_list.push(p.size)
+                // }
+
+                // pts_geo.setAttribute('position', new THREE.Float32BufferAttribute(pos_list, 3))
+                // pts_geo.setAttribute('color', new THREE.Float32BufferAttribute(color_list, 3))
+                // pts_geo.setAttribute('size', new THREE.Float32BufferAttribute(size_list, 1))
+
+                // pts_geo.attributes.position.needsUpdate = true
+                // pts_geo.attributes.color.needsUpdate = true
+                // pts_geo.attributes.size.needsUpdate = true
             }
 
             function getFaces(mesh, invert_normal=false) {
                 const vertices = mesh.geometry.getAttribute("position")
                 let faces = []
-
+                
+                console.log("count", vertices.count)
                 for (let i = 0; i < vertices.count; i += 3) {
                     let tri = []
                     for (let j = 0; j < 3; j ++) {
@@ -385,10 +428,8 @@
                     } else {
                         faces.push(new THREE.Triangle(tri[0], tri[1], tri[2]))
                     }
-                    
                 }
-                
-                // console.log("faces", faces)
+
                 return faces
             }
 

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Rigid Body Simulation</title>
+        <link type="text/css" rel="stylesheet" href="style.css">
+	</head>
+	<body>
+
+        <div id="container"></div>
+        <div id="info"></div>
+        <script async src="https://ga.jspm.io/npm:es-module-shims@1.5.17/dist/es-module-shims.js"></script>
+        <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.144.0/build/three.module.js",
+                "three/addons/": "./jsm/",
+                "libs/": "./"
+            }
+        }
+        </script>
+        
+		<script type="module">
+
+            // Load module
+            import * as THREE from 'three'
+            import Stats from 'three/addons/libs/stats.module.js'
+            import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
+            import { GUI } from 'three/addons/libs/lil-gui.module.min.js'
+            import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js'
+            import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js'
+            import { Brick } from 'libs/Brick.js'
+
+            // Simulater variables
+            let camera, scene, renderer, controls, stats
+            const clock = new THREE.Clock()
+            let h_count = 0
+            
+            // Physic variables
+            const gravity = new THREE.Vector3(0, 0, 0)
+            const air_resitance = 0.001
+            const move_step = 0.1
+
+            // Object variables
+            let plane
+            const bricks = []
+            
+            const cloth_pos = new THREE.Vector3(0, 10, 0)
+            const cloth_mass = 2
+            const cloth_dense = 20
+            const node_num = (cloth_dense + 1) ** 2
+            let cloth, cloth_geo, cloth_corners
+            let cloth_move = 0
+            let node_v
+            let cloth_edges
+
+            let box, box_geo, box_v
+            const box_mass = 3
+
+            let force_flag = true
+            
+            // GUI params
+            const canvas = document.querySelector("#container")
+            const params = {
+                wind: 0,
+                box: true,
+				Reset: function () {
+                    renderer.domElement.remove()
+                    init()
+				}
+			}
+            
+            const a = [new THREE.Vector3(0, 1, 2)]
+            a[0].multiplyScalar(2)
+            console.log(a)
+
+			init()
+            initControls()
+			animate()
+
+            function init() {
+
+                // Init scene
+                scene = new THREE.Scene()
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 1000 )
+                camera.position.z = -20
+                camera.position.y = 30
+                camera.position.x = 0
+
+                renderer = new THREE.WebGLRenderer({alpha: true})
+                renderer.setPixelRatio( window.devicePixelRatio )
+                renderer.setSize( window.innerWidth, window.innerHeight )
+                renderer.autoClear = false
+                canvas.appendChild( renderer.domElement )
+
+                const light_env = new THREE.AmbientLight( 0xf0f0f0, 0.5 ); // soft white light
+                scene.add( light_env )
+
+                const light_point1 = new THREE.PointLight( 0xffffff, 0.8, 0 )
+                light_point1.position.set( 200, 200, -300 )
+                scene.add(light_point1)
+
+                const light_point2 = new THREE.PointLight( 0xffffff, 0.5, 0 )
+                light_point2.position.set( -200, 200, 300 )
+                scene.add(light_point2)
+                
+                // Add plane
+                const bg_geometry = new THREE.PlaneGeometry(100, 50);
+                const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
+                const bg_material = new THREE.MeshBasicMaterial({
+                    // side: THREE.DoubleSide,
+                    map: bg_texture
+                })
+                plane = new THREE.Mesh( bg_geometry.toNonIndexed(), bg_material )
+                plane.rotation.set(-Math.PI / 2, 0, Math.PI)
+                plane.position.set(0, -5, 0)
+                plane.updateMatrix()
+                plane.geometry.applyMatrix4(plane.matrix)
+                plane.rotation.set(0, 0, 0)
+                plane.updateMatrix()
+                scene.add( plane )
+                
+                // Add a cube
+                if (params.box) {
+                    for (let i = 0; i < 1; i++) {
+                        const pos = new THREE.Vector3(i * 3, 0, i * 3)
+                        const velocity = new THREE.Vector3(0, 0, 0)
+                        const brick = new Brick(2, pos, velocity, gravity)
+        
+                        bricks.push(brick)
+                        scene.add(brick.mesh)
+                    }
+                }
+
+                controls = new TrackballControls(camera, renderer.domElement);
+                controls.dynamicDampingFactor = 0.5;
+                controls.rotateSpeed = 2;
+                controls.zoomSpeed = 2;
+                controls.panSpeed = 3;
+                
+                document.getElementById("info").innerHTML = "<p>Simulate cloth by a spring-damper mesh, including wind and box on top.</p><p>Keyboard <span>Q | A</span> to move the cloth. If you check <span>'box'</span>, please click <span>'Reset'</span></p>"
+
+            }
+
+            function initControls() {
+                
+                // Add stats and controls
+                stats = new Stats();
+				canvas.appendChild( stats.dom )
+
+				window.addEventListener('resize', onWindowResize)
+
+                window.addEventListener('keydown', function ( event ) {
+                    switch ( event.keyCode ) {
+                        case 81: // Q
+                            cloth_move = 1
+                            break
+                        case 65: // A
+                            cloth_move = - 1
+                    }
+                })
+
+                window.addEventListener('keyup', function () {
+                    cloth_move = 0
+                })
+                
+                // Add GUI
+                const gui = new GUI()
+                gui.add(params, 'box')
+                gui.add(params, "Reset")
+
+                gui.open()
+                
+            }
+
+			function animate() {
+				requestAnimationFrame( animate )
+
+                let h = Math.min(0.016, clock.getDelta())
+                
+                if (h_count < 10 && h > 0) {
+                    render(h)
+                }
+                
+                h_count = h_count + h
+
+                controls.update()
+				renderer.render( scene, camera )
+                stats.update()
+			}
+
+            function render(h) {
+                let forces = [], poses = []
+                if (force_flag) {
+                    console.log('set force')
+                    forces.push(new THREE.Vector3(0, 0, 100))
+                    poses.push(new THREE.Vector3(1, 0, 0))
+                    force_flag = false
+                }
+                for (let brick of bricks) {
+                    console.log('s', brick.s, 'ds', brick.ds)
+                    console.log('q', brick.mesh.quaternion)
+                    
+                    brick.computeGrad(forces, poses)
+                    brick.updateStates(h)
+                }
+                return 
+
+                let node_pos = cloth_geo.getAttribute('position')
+
+                const face_idx = cloth_geo.getIndex()
+                
+                const cloth_corners_pos = []
+                for (let i = 0; i < 4; i++) {
+                    const corner_idx = cloth_corners[i]
+                    cloth_corners_pos.push([node_pos.getX(corner_idx), node_pos.getY(corner_idx), node_pos.getZ(corner_idx)])
+                }
+
+                let s, t, box_pos
+                if (params.box) {
+                    box_pos = box.position
+                    s = [node_pos, node_v, box_pos, box_v]
+                } else {
+                    s = [node_pos, node_v]
+                }
+                
+                if (params.RK4) {
+                    const k1 = statesGradient(s, h)
+                    t = statesLinearStep(s, k1, 0.5 * h)
+                    const k2 = statesGradient(t, h)
+                    t = statesLinearStep(s, k2, 0.5 * h)
+                    const k3 = statesGradient(t, h)
+                    t = statesLinearStep(s, k3, h)
+                    const k4 = statesGradient(t, h)
+                    
+                    t = statesLinearStep(s, k1, h / 6)
+                    t = statesLinearStep(s, k2, h / 3)
+                    t = statesLinearStep(s, k3, h / 3)
+                    t = statesLinearStep(s, k4, h / 6)
+                 
+                } else { // Eular
+                    
+                    // console.log('nodepos', node_pos, 'nodev', node_v)
+
+                    const k = statesGradient(s, h)
+                    t = statesLinearStep(s, k, h)
+
+                }
+
+                if (params.box) {
+                    t = facePointDetect(s, t)
+                }
+
+                node_pos = t[0]
+                node_v = t[1]
+                if (params.box) {
+                    box_pos = t[2]
+                    box_v = t[3]
+                    console.log('box_pos v', box_pos, box_v)
+                    box.position.set(box_pos.x, box_pos.y, box_pos.z)
+                    box.updateMatrix()
+                    box.geometry.applyMatrix4(box.matrix)
+                    box.position.set(0, 0, 0)
+                    box.updateMatrix()
+                }
+                
+                for (let i = 0; i < 4; i++) {
+                    const corner_idx = cloth_corners[i]
+                    node_pos.setXYZ(corner_idx, cloth_corners_pos[i][0], cloth_corners_pos[i][1] + cloth_move * move_step, cloth_corners_pos[i][2])
+                    node_v[corner_idx] = new THREE.Vector3(0, 0, 0)
+                }
+                
+                cloth_geo.setAttribute('position', node_pos)
+                cloth_geo.attributes.position.needsUpdate = true
+            }
+
+            function statesGradient(s, h) {
+
+                const node_pos = s[0]
+                const node_v = s[1]
+                let box_pos, box_v
+                if (params.box) {
+                    box_pos = s[2]
+                    box_v = s[3]
+                }
+
+                let node_fn = new Array(node_num).fill([0, -params.gravity, 0])
+                // console.log(box_pos)
+                
+                for (let e of cloth_edges) {
+                    const p0 = getV3(node_pos, e.v0)
+                    const p1 = getV3(node_pos, e.v1)
+                    const x01 = p1.clone().sub(p0)
+                    const l = x01.length()
+                    x01.normalize()
+                    const fs = x01.clone()
+                    fs.multiplyScalar(e.s_spring * (l - e.l0))
+                    node_fn[e.v0] = [node_fn[e.v0][0] + fs.x, node_fn[e.v0][1] + fs.y, node_fn[e.v0][2] + fs.z]
+                    node_fn[e.v1] = [node_fn[e.v1][0] - fs.x, node_fn[e.v1][1] - fs.y, node_fn[e.v1][2] - fs.z]
+                    
+                    const v0 = node_v[e.v0]
+                    const v1 = node_v[e.v1]
+                    const v01 = v1.clone().sub(v0)
+                    const fd = x01.clone()
+                    fd.multiplyScalar(params.s_damping * v01.dot(x01))
+                    node_fn[e.v0] = [node_fn[e.v0][0] + fd.x, node_fn[e.v0][1] + fd.y, node_fn[e.v0][2] + fd.z]
+                    node_fn[e.v1] = [node_fn[e.v1][0] - fd.x, node_fn[e.v1][1] - fd.y, node_fn[e.v1][2] - fd.z]
+
+                    if (params.wind) {
+                        const fw = new THREE.Vector3(5, -5, 0)
+                        fw.multiplyScalar(fw.cross(x01).length())
+                        node_fn[e.v0] = [node_fn[e.v0][0] + fw.x, node_fn[e.v0][1] + fw.y, node_fn[e.v0][2] + fw.z]
+                        node_fn[e.v1] = [node_fn[e.v1][0] + fw.x, node_fn[e.v1][1] + fw.y, node_fn[e.v1][2] + fw.z]
+                    }
+
+                }
+
+                for (let i = 0; i < node_num; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        node_fn[i][j] /= cloth_mass
+                    }
+                }
+
+                if (params.box) {
+                    const box_f = new THREE.Vector3(0, -params.gravity, 0)
+                    const box_acc = box_f.clone()
+
+                    box_acc.multiplyScalar(1 / box_mass)
+
+                    return [node_v, node_fn, box_v, box_acc]
+                } else {
+                    return [node_v, node_fn]
+                }
+                
+            }
+
+            function statesLinearStep(s, k, h) {
+                
+                const sn0 = s[0].clone()
+                const sn1 = []
+                for (let i = 0; i < node_num; i++) {
+                    const xn = getV3(s[0], i).clone()
+                    xn.addScaledVector(k[0][i], h)
+                    sn0.setXYZ(i, xn.x, xn.y, xn.z)
+                    
+                    const vn = s[1][i].clone()
+                    vn.addScaledVector(new THREE.Vector3(k[1][i][0], k[1][i][1], k[1][i][2]), h)
+                    vn.multiplyScalar(1 - air_resitance)
+                    sn1.push(vn)
+                }
+
+                if (params.box) {
+                    const box_pos = s[2].clone()
+                    box_pos.addScaledVector(k[2], h)
+                    const box_v = s[3].clone()
+                    box_v.addScaledVector(k[3], h)
+
+                    return [sn0, sn1, box_pos, box_v]
+                } else {
+                    return [sn0, sn1]
+                }
+                
+            }
+
+            function facePointDetect(s, t) {
+
+                const node_pos = s[0]
+                const node_v = s[1]
+                const box_pos = s[2]
+                const box_v = s[3]
+
+                const node_posn = t[0]
+                const node_vn = t[1]
+                const box_posn = t[2]
+                const box_vn = t[3]
+
+                // Point-face detection
+                const box_node_pos = box_geo.getAttribute('position')
+                // console.log(box_node_pos)
+                const face_node_indices = box_geo.getIndex()
+
+                for (let i = 0; i < node_num; i++) {
+
+                    const x = getV3(node_pos, i).clone()
+                    const xn = getV3(node_posn, i).clone()
+                    const move = xn.clone()
+                    move.sub(x)
+
+                    const vn = node_vn[i].clone()
+                    
+                    
+                    for (let j = 0; j < face_node_indices.count; j += 3) {
+                        const v0 = face_node_indices.getX(j)
+                        const v1 = face_node_indices.getY(j)
+                        const v2 = face_node_indices.getZ(j)
+                        const p0 = new THREE.Vector3(box_node_pos.getX(v0), box_node_pos.getY(v0), box_node_pos.getZ(v0))
+                        const p1 = new THREE.Vector3(box_node_pos.getX(v1), box_node_pos.getY(v1), box_node_pos.getZ(v1))
+                        const p2 = new THREE.Vector3(box_node_pos.getX(v2), box_node_pos.getY(v2), box_node_pos.getZ(v2))
+                        
+                        const n = new THREE.Vector3()
+                        const tri = new THREE.Triangle(p0, p1, p2)
+                        tri.getNormal(n)
+                            
+                        const scalar_old = tri.a.clone().sub(x).dot(n)
+                        const scalar_new = tri.a.clone().sub(xn).dot(n)
+                        const fraction = scalar_old / (scalar_old - scalar_new)
+                            
+                        //     // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
+                        //     // console.log("subtract", tri.a.clone().sub(ball_old.position))
+                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                                
+                            const p_on_plane = x.clone()
+                            p_on_plane.addScaledVector(move, fraction)
+                            
+                            // console.log("p on plane", p_on_plane)
+                            if (!tri.containsPoint(p_on_plane)) continue
+                            
+                            const n = new THREE.Vector3()
+                            tri.getNormal(n)
+                            
+                            // Compute velocity after bouncing
+                            const pt_v_scalar = vn.clone().dot(n)
+                            let new_v_n = n.clone().multiplyScalar(pt_v_scalar)
+                            let new_v_t = vn.clone().sub(new_v_n)
+
+                            // Add velocity response restriction
+                            new_v_n.multiplyScalar(0.8).negate()
+                            new_v_t.multiplyScalar(0.5)
+                            vn.addVectors(new_v_n, new_v_t)
+                            node_vn[i] = vn.clone()
+
+                            const box_v_scalar = box_v.clone().dot(n)
+                            new_v_n = n.clone().multiplyScalar(box_v_scalar)
+                            new_v_t = box_v.clone().sub(new_v_n)
+                            new_v_n.multiplyScalar(0.8).negate()
+                            new_v_t.multiplyScalar(0.5)
+                            box_vn.addVectors(new_v_n, new_v_t)
+                            
+                            node_posn.setXYZ(i, p_on_plane.x, p_on_plane.y, p_on_plane.z)
+                            box_posn.set(box_posn.x, box_posn.y + 0.1, box_posn.z)
+                                
+                        }
+
+                    }
+                }
+
+                return [node_posn, node_vn, box_posn, box_vn]
+                
+            }
+
+            function onWindowResize() {
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                camera.lookAt( scene.position );
+
+                renderer.setSize( window.innerWidth, window.innerHeight );
+                
+                controls.handleResize();
+
+            }
+
+
+		</script>
+
+	</body>
+</html>

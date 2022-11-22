@@ -14,8 +14,7 @@
         {
             "imports": {
                 "three": "https://unpkg.com/three@0.144.0/build/three.module.js",
-                "three/addons/": "./jsm/",
-                "libs/": "./"
+                "three/addons/": "./jsm/"
             }
         }
         </script>
@@ -29,7 +28,8 @@
             import { GUI } from 'three/addons/libs/lil-gui.module.min.js'
             import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js'
             import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js'
-            import { Brick } from 'libs/Brick.js'
+            import { Brick } from './Brick.js'
+            import { getV3 } from './libs.js'
 
             // Simulater variables
             let camera, scene, renderer, controls, stats
@@ -37,12 +37,12 @@
             let h_count = 0
             
             // Physic variables
-            const gravity = new THREE.Vector3(0, 0, 0)
+            const gravity = new THREE.Vector3(0, -3, 0)
             const air_resitance = 0.001
             const move_step = 0.1
 
             // Object variables
-            let plane
+            let plane_geo, plane
             const bricks = []
             
             const cloth_pos = new THREE.Vector3(0, 10, 0)
@@ -63,6 +63,8 @@
             const canvas = document.querySelector("#container")
             const params = {
                 wind: 0,
+                c_r: 0.5,
+                c_f: 0.5,
                 box: true,
 				Reset: function () {
                     renderer.domElement.remove()
@@ -104,14 +106,17 @@
                 light_point2.position.set( -200, 200, 300 )
                 scene.add(light_point2)
                 
+                const axesHelper = new THREE.AxesHelper( 5 );
+                scene.add( axesHelper );
+
                 // Add plane
-                const bg_geometry = new THREE.PlaneGeometry(100, 50);
-                const bg_texture = new THREE.TextureLoader().load("assets/tamu.jpg")
-                const bg_material = new THREE.MeshBasicMaterial({
+                plane_geo = new THREE.PlaneGeometry(100, 50);
+                const plane_tex = new THREE.TextureLoader().load("assets/tamu.jpg")
+                const plane_material = new THREE.MeshBasicMaterial({
                     // side: THREE.DoubleSide,
-                    map: bg_texture
+                    map: plane_tex
                 })
-                plane = new THREE.Mesh( bg_geometry.toNonIndexed(), bg_material )
+                plane = new THREE.Mesh( plane_geo, plane_material )
                 plane.rotation.set(-Math.PI / 2, 0, Math.PI)
                 plane.position.set(0, -5, 0)
                 plane.updateMatrix()
@@ -123,7 +128,7 @@
                 // Add a cube
                 if (params.box) {
                     for (let i = 0; i < 1; i++) {
-                        const pos = new THREE.Vector3(i * 3, 0, i * 3)
+                        const pos = new THREE.Vector3(10, 0, 0)
                         const velocity = new THREE.Vector3(0, 0, 0)
                         const brick = new Brick(2, pos, velocity, gravity)
         
@@ -178,7 +183,7 @@
 
                 let h = Math.min(0.016, clock.getDelta())
                 
-                if (h_count < 10 && h > 0) {
+                if (h_count < 30 && h > 0) {
                     render(h)
                 }
                 
@@ -193,173 +198,117 @@
                 let forces = [], poses = []
                 if (force_flag) {
                     console.log('set force')
-                    forces.push(new THREE.Vector3(0, 0, 100))
-                    poses.push(new THREE.Vector3(1, 0, 0))
+                    forces.push(new THREE.Vector3(50, 50, 100))
+                    poses.push(new THREE.Vector3(11, 0, 0))
                     force_flag = false
                 }
                 for (let brick of bricks) {
-                    console.log('s', brick.s, 'ds', brick.ds)
-                    console.log('q', brick.mesh.quaternion)
                     
+                    // brick.computeGrad()
                     brick.computeGrad(forces, poses)
-                    brick.updateStates(h)
-                }
-                return 
+                    let s_new = brick.calcOneStep(h)
+                    console.log('s', brick.s, 's_new', s_new, 'ds', brick.ds)
 
-                let node_pos = cloth_geo.getAttribute('position')
-
-                const face_idx = cloth_geo.getIndex()
-                
-                const cloth_corners_pos = []
-                for (let i = 0; i < 4; i++) {
-                    const corner_idx = cloth_corners[i]
-                    cloth_corners_pos.push([node_pos.getX(corner_idx), node_pos.getY(corner_idx), node_pos.getZ(corner_idx)])
-                }
-
-                let s, t, box_pos
-                if (params.box) {
-                    box_pos = box.position
-                    s = [node_pos, node_v, box_pos, box_v]
-                } else {
-                    s = [node_pos, node_v]
-                }
-                
-                if (params.RK4) {
-                    const k1 = statesGradient(s, h)
-                    t = statesLinearStep(s, k1, 0.5 * h)
-                    const k2 = statesGradient(t, h)
-                    t = statesLinearStep(s, k2, 0.5 * h)
-                    const k3 = statesGradient(t, h)
-                    t = statesLinearStep(s, k3, h)
-                    const k4 = statesGradient(t, h)
-                    
-                    t = statesLinearStep(s, k1, h / 6)
-                    t = statesLinearStep(s, k2, h / 3)
-                    t = statesLinearStep(s, k3, h / 3)
-                    t = statesLinearStep(s, k4, h / 6)
-                 
-                } else { // Eular
-                    
-                    // console.log('nodepos', node_pos, 'nodev', node_v)
-
-                    const k = statesGradient(s, h)
-                    t = statesLinearStep(s, k, h)
-
-                }
-
-                if (params.box) {
-                    t = facePointDetect(s, t)
-                }
-
-                node_pos = t[0]
-                node_v = t[1]
-                if (params.box) {
-                    box_pos = t[2]
-                    box_v = t[3]
-                    console.log('box_pos v', box_pos, box_v)
-                    box.position.set(box_pos.x, box_pos.y, box_pos.z)
-                    box.updateMatrix()
-                    box.geometry.applyMatrix4(box.matrix)
-                    box.position.set(0, 0, 0)
-                    box.updateMatrix()
-                }
-                
-                for (let i = 0; i < 4; i++) {
-                    const corner_idx = cloth_corners[i]
-                    node_pos.setXYZ(corner_idx, cloth_corners_pos[i][0], cloth_corners_pos[i][1] + cloth_move * move_step, cloth_corners_pos[i][2])
-                    node_v[corner_idx] = new THREE.Vector3(0, 0, 0)
-                }
-                
-                cloth_geo.setAttribute('position', node_pos)
-                cloth_geo.attributes.position.needsUpdate = true
-            }
-
-            function statesGradient(s, h) {
-
-                const node_pos = s[0]
-                const node_v = s[1]
-                let box_pos, box_v
-                if (params.box) {
-                    box_pos = s[2]
-                    box_v = s[3]
-                }
-
-                let node_fn = new Array(node_num).fill([0, -params.gravity, 0])
-                // console.log(box_pos)
-                
-                for (let e of cloth_edges) {
-                    const p0 = getV3(node_pos, e.v0)
-                    const p1 = getV3(node_pos, e.v1)
-                    const x01 = p1.clone().sub(p0)
-                    const l = x01.length()
-                    x01.normalize()
-                    const fs = x01.clone()
-                    fs.multiplyScalar(e.s_spring * (l - e.l0))
-                    node_fn[e.v0] = [node_fn[e.v0][0] + fs.x, node_fn[e.v0][1] + fs.y, node_fn[e.v0][2] + fs.z]
-                    node_fn[e.v1] = [node_fn[e.v1][0] - fs.x, node_fn[e.v1][1] - fs.y, node_fn[e.v1][2] - fs.z]
-                    
-                    const v0 = node_v[e.v0]
-                    const v1 = node_v[e.v1]
-                    const v01 = v1.clone().sub(v0)
-                    const fd = x01.clone()
-                    fd.multiplyScalar(params.s_damping * v01.dot(x01))
-                    node_fn[e.v0] = [node_fn[e.v0][0] + fd.x, node_fn[e.v0][1] + fd.y, node_fn[e.v0][2] + fd.z]
-                    node_fn[e.v1] = [node_fn[e.v1][0] - fd.x, node_fn[e.v1][1] - fd.y, node_fn[e.v1][2] - fd.z]
-
-                    if (params.wind) {
-                        const fw = new THREE.Vector3(5, -5, 0)
-                        fw.multiplyScalar(fw.cross(x01).length())
-                        node_fn[e.v0] = [node_fn[e.v0][0] + fw.x, node_fn[e.v0][1] + fw.y, node_fn[e.v0][2] + fw.z]
-                        node_fn[e.v1] = [node_fn[e.v1][0] + fw.x, node_fn[e.v1][1] + fw.y, node_fn[e.v1][2] + fw.z]
+                    if (brick.checkBoundaryToGround(plane.position.y)) {
+                        s_new = objGroundCollision(brick, s_new, plane)
                     }
 
+                    
+                    brick.applyNewState(s_new)
                 }
-
-                for (let i = 0; i < node_num; i++) {
-                    for (let j = 0; j < 3; j++) {
-                        node_fn[i][j] /= cloth_mass
-                    }
-                }
-
-                if (params.box) {
-                    const box_f = new THREE.Vector3(0, -params.gravity, 0)
-                    const box_acc = box_f.clone()
-
-                    box_acc.multiplyScalar(1 / box_mass)
-
-                    return [node_v, node_fn, box_v, box_acc]
-                } else {
-                    return [node_v, node_fn]
-                }
-                
             }
 
-            function statesLinearStep(s, k, h) {
+
+            function objGroundCollision(obj, s_new, ground_mesh) {
+                const ground_vertices = ground_mesh.geometry.getAttribute('position')
+                const ground_face_indices = plane_geo.getIndex()
+                const ground_faces = []
+
+                for (let i = 0; i < ground_face_indices.count; i += 3) {
+                    ground_faces.push(new THREE.Triangle(
+                        getV3(ground_vertices, ground_face_indices.getX(i)),
+                        getV3(ground_vertices, ground_face_indices.getY(i)),
+                        getV3(ground_vertices, ground_face_indices.getZ(i)),
+                    ))    
+                }
                 
-                const sn0 = s[0].clone()
-                const sn1 = []
-                for (let i = 0; i < node_num; i++) {
-                    const xn = getV3(s[0], i).clone()
-                    xn.addScaledVector(k[0][i], h)
-                    sn0.setXYZ(i, xn.x, xn.y, xn.z)
+                const v_old = obj.getVerticesWorld()
+                const v_new = obj.getVerticesWorld(s_new)
+                console.log('old', v_old, 'new', v_new)
+
+                const v_velocity_new = new THREE.Vector3(0, 0, 0)
+
+                const P_delta_total = new THREE.Vector3(0, 0, 0)
+                const L_delta_total = new THREE.Vector3(0, 0, 0)
+
+                for (let i = 0; i < obj.v_num; i++) {
+
+                    const move = v_new[i].clone()
+                    move.sub(v_old[i])
+
+                    const v_velocity = obj.ds[0].clone()
+                    const r = v_old[i].clone().sub(obj.s[0])
+                    const angle_velocity = obj.w.clone().cross(r)
+                    // console.log('velocity', v_velocity, angle_velocity)
+                    v_velocity.add(angle_velocity)                
+
+                    for (let ground_tri of ground_faces) {
+                        const tri_n = new THREE.Vector3()
+                        ground_tri.getNormal(tri_n)
+                        
+                        const scalar_old = ground_tri.a.clone().sub(v_old[i]).dot(tri_n)
+                        const scalar_new = ground_tri.a.clone().sub(v_new[i]).dot(tri_n)
+                        const fraction = scalar_old / (scalar_old - scalar_new)
+
+                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                            const p_on_plane = v_old[i].clone()
+                            p_on_plane.addScaledVector(move, fraction)
+                            
+                            // console.log("p on plane", p_on_plane)
+                            if (!ground_tri.containsPoint(p_on_plane)) continue
+
+                            const normal_scalar = v_velocity.clone().dot(tri_n)
+                            const v_velocity_normal = tri_n.clone().multiplyScalar(normal_scalar)
+                            const v_velocity_tangent = v_velocity.clone().sub(v_velocity_normal)
+                            
+                            const d1 = -1 * (1 + params.c_r) * normal_scalar
+                            const d2 = 1 / obj.mass + tri_n.dot(r.clone().cross(tri_n).cross(r).applyMatrix3(obj.I_inv))
+                            const j = d1 / d2
+                            const P_delta = tri_n.clone().multiplyScalar(j)
+                            const L_delta = r.clone().cross(tri_n).multiplyScalar(j)
+                            
+                            console.log("i", i, P_delta, L_delta)
+                            P_delta_total.add(P_delta)
+                            L_delta_total.add(L_delta)
+
+
+                            // // Add velocity response restriction
+                            // v_velocity_normal.multiplyScalar(0.8).negate()
+                            // v_velocity_tangent.multiplyScalar(0.5)
+                            // v_velocity_normal.add(v_velocity_tangent)
+                            // v_velocity_new.add(v_velocity_normal)
+
+                        }
+
+                    }
                     
-                    const vn = s[1][i].clone()
-                    vn.addScaledVector(new THREE.Vector3(k[1][i][0], k[1][i][1], k[1][i][2]), h)
-                    vn.multiplyScalar(1 - air_resitance)
-                    sn1.push(vn)
-                }
-
-                if (params.box) {
-                    const box_pos = s[2].clone()
-                    box_pos.addScaledVector(k[2], h)
-                    const box_v = s[3].clone()
-                    box_v.addScaledVector(k[3], h)
-
-                    return [sn0, sn1, box_pos, box_v]
-                } else {
-                    return [sn0, sn1]
                 }
                 
+                console.log('P_delta_total', P_delta_total, 'L_delta_total', L_delta_total)
+
+                s_new[2].add(P_delta_total)
+                s_new[3].add(L_delta_total)
+                // if (P_delta_total.length() > 0) {
+                    // s_new[2].copy(P_delta_total)
+                    // s_new[3].copy(L_delta_total)
+                // }
+                
+
+                return s_new
+            }
+
+            function pointFaceCollision(obj1, obj2) {
+
             }
 
             function facePointDetect(s, t) {

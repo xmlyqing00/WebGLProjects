@@ -1,52 +1,30 @@
-import * as THREE from "three"
+import * as THREE from 'three'
+import {getV3} from './libs.js'
 
-
-function getV3(buffer_attribute, offset) {
-    // const offset = idx
-    return new THREE.Vector3(buffer_attribute.getX(offset), buffer_attribute.getY(offset), buffer_attribute.getZ(offset))
-}
-
-function getFaces(mesh, invert_normal=false) {
-    const vertices = mesh.geometry.getAttribute("position")
-    let faces = []
-    
-    for (let i = 0; i < vertices.count; i += 3) {
-        let tri = []
-        for (let j = 0; j < 3; j ++) {
-            const base = i + j
-            const v = new THREE.Vector3(vertices.getX(base), vertices.getY(base), vertices.getZ(base))
-            v.add(mesh.position)
-            tri.push(v)
-        }
-        if (invert_normal) {
-            faces.push(new THREE.Triangle(tri[0], tri[2], tri[1]))
-        } else {
-            faces.push(new THREE.Triangle(tri[0], tri[1], tri[2]))
-        }
-    }
-
-    return faces
-}
 
 class Brick {
     constructor(size, pos, velocity, gravity) {
         
         const geo = new THREE.BoxGeometry(3 * size, 1 * size, 2 * size)    
-        geo.translate(pos.x, pos.y, pos.z)
+        // geo.translate(pos.x, pos.y, pos.z)
         const material = new THREE.MeshLambertMaterial({ color: 0x75c3eb })
         this.mesh = new THREE.Mesh(geo, material)
+        this.mesh.position.copy(pos)
         this.mass = 1
         this.gravity = gravity
+        this.boundary = 3 * size
         
-        this.vertices = this.mesh.geometry.getAttribute('position')
+        const positions = this.mesh.geometry.getAttribute('position')
+        this.vertices = []
         this.face_indices = geo.getIndex()
 
-        this.v_num = this.vertices.count / 3
+        this.v_num = positions.count / 3
         
         // new THREE.Vector3(0, 0, 0)
         const I_arr = [0, 0, 0, 0, 0, 0, 0, 0, 0]
         for (let i = 0; i < this.v_num; i++) {
-            const v = getV3(this.vertices, i)
+            const v = getV3(positions, i)
+            this.vertices.push(v)
                 
             const I_v = [
                 v.y * v.y + v.z * v.z,
@@ -68,9 +46,9 @@ class Brick {
             I_arr[3], I_arr[4], I_arr[5], 
             I_arr[6], I_arr[7], I_arr[8]
         )
-        this.I0_inv = this.I.invert() 
+        this.I0_inv = this.I.clone().invert() 
 
-        console.log('c', pos)
+        console.log('c', pos, this.mesh.position)
         console.log('I', this.I)
         console.log('v', this.vertices)
         console.log('f', this.face_indices)
@@ -92,12 +70,14 @@ class Brick {
     computeGrad(forces = [], poses = []) {
         const mat4 = new THREE.Matrix4().makeRotationFromQuaternion(this.s[1])
         const R = new THREE.Matrix3().setFromMatrix4(mat4)
-        const I_inv = R.clone()
-        I_inv.multiply(this.I0_inv).multiply(R.transpose())
-        const w = this.s[3].clone()
-        w.applyMatrix3(I_inv)
-        const w_q = new THREE.Quaternion(0, w.x/2, w.y/2, w.z/2)
+        this.I_inv = R.clone()
+        this.I_inv.multiply(this.I0_inv).multiply(R.transpose())
+        this.w = this.s[3].clone()
+        this.w.applyMatrix3(this.I_inv)
+        const w_q = new THREE.Quaternion(this.w.x, this.w.y, this.w.z, 0)
         w_q.multiply(this.s[1])
+        w_q.set(w_q.x / 2, w_q.y / 2, w_q.z / 2, w_q.w / 2)
+        w_q.normalize()
 
         const force = new THREE.Vector3(0, 0, 0)
         const torque = new THREE.Vector3(0, 0, 0)
@@ -105,7 +85,7 @@ class Brick {
         for (let i = 0; i < forces.length; i++) {
             const r = poses[i].clone()
             r.sub(this.s[0])
-            const t = forces[i].clone().cross(r)
+            const t = r.clone().cross(forces[i])
 
             force.add(forces[i].clone())
             torque.add(t.clone())
@@ -115,13 +95,14 @@ class Brick {
         
         this.ds = [
             this.s[2].clone().multiplyScalar(1 / this.mass),
-            w_q,
-            force,
-            torque
+            w_q.clone(),
+            force.clone(),
+            torque.clone()
         ]
     }
 
-    updateStates(h) {
+    calcOneStep(h) {
+        const s_new = []
         for (let i = 0; i < 4; i++) {
             if (i == 1) {
                 const q = new THREE.Quaternion(
@@ -131,14 +112,45 @@ class Brick {
                     this.s[i].w + h * this.ds[i].w,
                 )
                 q.normalize()
-                this.s[i] = q.clone()
+                s_new.push(q.clone())
             } else {
-                this.s[i].addScaledVector(this.ds[i], h)
+                const v = this.s[i].clone()
+                v.addScaledVector(this.ds[i], h)
+                s_new.push(v.clone())
             }   
         }
+        return s_new
+    }
 
+    applyNewState(s_new) {
+        this.s = s_new
         this.mesh.position.copy(this.s[0])
         this.mesh.quaternion.copy(this.s[1])
+    }
+
+    getVerticesWorld(s_new = null) {
+        const vertices_world = []
+        for (let v of this.vertices) {
+            const v_world = v.clone()
+            if (s_new) {
+                v_world.applyQuaternion(s_new[1])
+                v_world.add(s_new[0])
+            } else {
+                v_world.applyQuaternion(this.s[1])
+                v_world.add(this.s[0])
+            }
+            
+            vertices_world.push(v_world.clone())
+        }
+        return vertices_world
+    }
+
+    checkBoundaryToGround(ylevel) {
+        if (Math.abs(this.s[0].y - ylevel) > this.boundary) {
+            return false
+        } else {
+            return true
+        }
     }
 }
 

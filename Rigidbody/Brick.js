@@ -12,7 +12,7 @@ class Brick {
         this.mesh.position.copy(pos)
         this.mass = 1
         this.gravity = gravity
-        this.boundary = 3 * size
+        this.boundary = 10 * size
         
         const positions = this.mesh.geometry.getAttribute('position')
         this.vertices = []
@@ -37,7 +37,7 @@ class Brick {
                 -v.y * v.z,
                 v.x * v.x + v.y * v.y
             ]
-            for (let j = 0; j < 9; j++) I_arr[j] += I_v[j] * this.mass / 96
+            for (let j = 0; j < 9; j++) I_arr[j] += I_v[j] * this.mass / 12
         }
         
         this.I = new THREE.Matrix3()
@@ -74,10 +74,9 @@ class Brick {
         this.I_inv.multiply(this.I0_inv).multiply(R.transpose())
         this.w = this.s[3].clone()
         this.w.applyMatrix3(this.I_inv)
-        const w_q = new THREE.Quaternion(this.w.x, this.w.y, this.w.z, 0)
+        const w_q = new THREE.Quaternion(this.w.x/2, this.w.y/2, this.w.z/2, 0)
         w_q.multiply(this.s[1])
-        w_q.set(w_q.x / 2, w_q.y / 2, w_q.z / 2, w_q.w / 2)
-        w_q.normalize()
+        // w_q.normalize()
 
         const force = new THREE.Vector3(0, 0, 0)
         const torque = new THREE.Vector3(0, 0, 0)
@@ -102,7 +101,7 @@ class Brick {
     }
 
     calcOneStep(h) {
-        const s_new = []
+        this.s_new = []
         for (let i = 0; i < 4; i++) {
             if (i == 1) {
                 const q = new THREE.Quaternion(
@@ -112,29 +111,39 @@ class Brick {
                     this.s[i].w + h * this.ds[i].w,
                 )
                 q.normalize()
-                s_new.push(q.clone())
+                this.s_new.push(q.clone())
             } else {
                 const v = this.s[i].clone()
                 v.addScaledVector(this.ds[i], h)
-                s_new.push(v.clone())
+                this.s_new.push(v.clone())
             }   
         }
-        return s_new
+
+        this.P_delta_total = new THREE.Vector3(0, 0, 0)
+        this.L_delta_total = new THREE.Vector3(0, 0, 0)
+        
     }
 
-    applyNewState(s_new) {
-        this.s = s_new
+    applyNewState() {
+        if (this.P_delta_total.length() > 0) {
+            this.s_new[0].copy(this.s[0])
+            this.s_new[1].copy(this.s[1])
+            this.s_new[2].add(this.P_delta_total)
+            this.s_new[3].add(this.L_delta_total)
+        }
+
+        this.s = this.s_new
         this.mesh.position.copy(this.s[0])
         this.mesh.quaternion.copy(this.s[1])
     }
 
-    getVerticesWorld(s_new = null) {
+    getVerticesWorld(s_tag) {
         const vertices_world = []
         for (let v of this.vertices) {
             const v_world = v.clone()
-            if (s_new) {
-                v_world.applyQuaternion(s_new[1])
-                v_world.add(s_new[0])
+            if (s_tag == 'new') {
+                v_world.applyQuaternion(this.s_new[1])
+                v_world.add(this.s_new[0])
             } else {
                 v_world.applyQuaternion(this.s[1])
                 v_world.add(this.s[0])
@@ -145,12 +154,49 @@ class Brick {
         return vertices_world
     }
 
-    checkBoundaryToGround(ylevel) {
-        if (Math.abs(this.s[0].y - ylevel) > this.boundary) {
-            return false
-        } else {
-            return true
+    calcFacesWorld() {
+        const vertices_world = this.getVerticesWorld()
+        const edge_hash = new Map()
+
+        this.faces = []
+        this.edges = []
+        for (let i = 0; i < this.face_indices.count; i += 3) {
+            this.faces.push(new THREE.Triangle(
+                vertices_world[this.face_indices.getX(i)],
+                vertices_world[this.face_indices.getY(i)],
+                vertices_world[this.face_indices.getZ(i)]
+            ))  
+            const vs = [
+                this.face_indices.getX(i), 
+                this.face_indices.getY(i), 
+                this.face_indices.getZ(i),
+                this.face_indices.getX(i)
+            ]  
+
+            for (let j = 0; j < 3; j++) {
+                let hash_key = vs[j] * 10000 + vs[j+1]
+                if (edge_hash.has(hash_key)) continue
+                
+                this.edges.push([
+                    vertices_world[vs[j]], 
+                    vertices_world[vs[j+1]]
+                ])
+                edge_hash.set(hash_key)
+                hash_key = vs[j + 1] * 10000 + vs[j]
+                edge_hash.set(hash_key)
+            }
         }
+
+        
+
+    }
+
+    checkBoundaryToGround(ground_center) {
+        // if (ground_center.distanceTo(this.s[0]) > this.boundary) {
+            // return false
+        // } else {
+            return true
+        // }
     }
 }
 

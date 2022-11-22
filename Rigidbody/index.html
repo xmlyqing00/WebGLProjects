@@ -42,8 +42,8 @@
             const move_step = 0.1
 
             // Object variables
-            let plane_geo, plane
-            const bricks = []
+            let bricks = []
+            let plane_geos = [], planes = []
             
             const cloth_pos = new THREE.Vector3(0, 10, 0)
             const cloth_mass = 2
@@ -62,10 +62,10 @@
             // GUI params
             const canvas = document.querySelector("#container")
             const params = {
-                wind: 0,
+                wind: false,
                 c_r: 0.5,
-                c_f: 0.5,
-                box: true,
+                c_f: 1,
+                brick_per_second: 0.2,
 				Reset: function () {
                     renderer.domElement.remove()
                     init()
@@ -85,8 +85,8 @@
                 // Init scene
                 scene = new THREE.Scene()
                 camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 1000 )
-                camera.position.z = -20
-                camera.position.y = 30
+                camera.position.z = -30
+                camera.position.y = 25
                 camera.position.x = 0
 
                 renderer = new THREE.WebGLRenderer({alpha: true})
@@ -106,36 +106,60 @@
                 light_point2.position.set( -200, 200, 300 )
                 scene.add(light_point2)
                 
-                const axesHelper = new THREE.AxesHelper( 5 );
-                scene.add( axesHelper );
+                // const axesHelper = new THREE.AxesHelper( 5 );
+                // scene.add( axesHelper );
+                
+                // Init
+                planes = []
+                plane_geos = []
+                bricks = []
+                h_count = 0
 
                 // Add plane
-                plane_geo = new THREE.PlaneGeometry(100, 50);
-                const plane_tex = new THREE.TextureLoader().load("assets/tamu.jpg")
-                const plane_material = new THREE.MeshBasicMaterial({
-                    // side: THREE.DoubleSide,
+                let plane_geo = new THREE.PlaneGeometry(20, 10)
+                let plane_tex = new THREE.TextureLoader().load("assets/tamu.jpg")
+                let plane_material = new THREE.MeshBasicMaterial({
+                    side: THREE.DoubleSide,
                     map: plane_tex
                 })
-                plane = new THREE.Mesh( plane_geo, plane_material )
-                plane.rotation.set(-Math.PI / 2, 0, Math.PI)
-                plane.position.set(0, -5, 0)
-                plane.updateMatrix()
-                plane.geometry.applyMatrix4(plane.matrix)
-                plane.rotation.set(0, 0, 0)
-                plane.updateMatrix()
+                plane_geo.rotateX(Math.PI / 2)
+                plane_geo.rotateZ(Math.PI * 1.3)
+                // plane_geo.rotateY(-Math.PI / 4)
+                plane_geo.translate(15, 10, 0)
+                let plane = new THREE.Mesh( plane_geo, plane_material )
                 scene.add( plane )
+                planes.push(plane)
+                plane_geos.push(plane_geo)
+
+                plane_geo = new THREE.PlaneGeometry(20, 10)
+                plane_geo.rotateX(Math.PI * 1.5)
+                plane_geo.rotateZ(Math.PI * 0.7)
+                // plane_geo.rotateY(Math.PI * 1)
+                plane_geo.translate(-3, -8, 0)
+                plane = new THREE.Mesh( plane_geo, plane_material )
+                scene.add( plane )
+                planes.push(plane)
+                plane_geos.push(plane_geo)
+
+                plane_geo = new THREE.PlaneGeometry(20, 10)
+                plane_geo.rotateX(Math.PI / 2)
+                plane_geo.rotateZ(Math.PI * 0.9)
+                plane_geo.translate(5, -40, 0)
+                plane = new THREE.Mesh( plane_geo, plane_material )
+                scene.add( plane )
+                planes.push(plane)
+                plane_geos.push(plane_geo)
+
+                plane_geo = new THREE.PlaneGeometry(20, 10)
+                plane_geo.rotateX(Math.PI / 2)
+                plane_geo.rotateZ(Math.PI * 1.4)
+                plane_geo.translate(30, -10, 0)
+                plane = new THREE.Mesh( plane_geo, plane_material )
+                scene.add( plane )
+                planes.push(plane)
+                plane_geos.push(plane_geo)
                 
-                // Add a cube
-                if (params.box) {
-                    for (let i = 0; i < 1; i++) {
-                        const pos = new THREE.Vector3(10, 0, 0)
-                        const velocity = new THREE.Vector3(0, 0, 0)
-                        const brick = new Brick(2, pos, velocity, gravity)
-        
-                        bricks.push(brick)
-                        scene.add(brick.mesh)
-                    }
-                }
+                
 
                 controls = new TrackballControls(camera, renderer.domElement);
                 controls.dynamicDampingFactor = 0.5;
@@ -143,7 +167,7 @@
                 controls.zoomSpeed = 2;
                 controls.panSpeed = 3;
                 
-                document.getElementById("info").innerHTML = "<p>Simulate cloth by a spring-damper mesh, including wind and box on top.</p><p>Keyboard <span>Q | A</span> to move the cloth. If you check <span>'box'</span>, please click <span>'Reset'</span></p>"
+                document.getElementById("info").innerHTML = "<p>Rigid Body Dynamic Similation. #Bricks: " + bricks.length + "</p>"
 
             }
 
@@ -171,7 +195,8 @@
                 
                 // Add GUI
                 const gui = new GUI()
-                gui.add(params, 'box')
+                gui.add(params, 'brick_per_second', 0, 1)
+                gui.add(params, 'wind')
                 gui.add(params, "Reset")
 
                 gui.open()
@@ -183,7 +208,8 @@
 
                 let h = Math.min(0.016, clock.getDelta())
                 
-                if (h_count < 30 && h > 0) {
+                if (h > 0) {
+                    addBrick(h_count)
                     render(h)
                 }
                 
@@ -194,53 +220,91 @@
                 stats.update()
 			}
 
+            function addBrick(h_count) {
+
+                if (Math.ceil(h_count / (1 / params.brick_per_second)) > bricks.length) {
+                    const pos = new THREE.Vector3(2, 18, 0)
+                    const velocity = new THREE.Vector3(5, 0, 0)
+                    const brick = new Brick(2, pos, velocity, gravity)
+                    
+                    brick.name = 'brick_' + bricks.length
+                    scene.add(brick.mesh)
+                    bricks.push(brick)
+
+                    console.log('Add brick')
+                }
+            }
+
             function render(h) {
                 let forces = [], poses = []
-                if (force_flag) {
-                    console.log('set force')
-                    forces.push(new THREE.Vector3(50, 50, 100))
-                    poses.push(new THREE.Vector3(11, 0, 0))
-                    force_flag = false
+                if (params.wind) {
+                    // console.log('set force')
+                    forces.push(new THREE.Vector3(0.01, -0.02, 0.04))
+                    poses.push(new THREE.Vector3(10, 0, 1))
+                    // force_flag = false
                 }
                 for (let brick of bricks) {
                     
                     // brick.computeGrad()
                     brick.computeGrad(forces, poses)
-                    let s_new = brick.calcOneStep(h)
-                    console.log('s', brick.s, 's_new', s_new, 'ds', brick.ds)
-
-                    if (brick.checkBoundaryToGround(plane.position.y)) {
-                        s_new = objGroundCollision(brick, s_new, plane)
-                    }
-
+                    brick.calcOneStep(h)
+                    brick.calcFacesWorld()
+                    console.log('s', brick.s, 's_new', brick.s_new, 'ds', brick.ds)
+                    console.log('delta', brick.P_delta_total, brick.L_delta_total)
                     
-                    brick.applyNewState(s_new)
+                    for (let i = 0; i < planes.length; i++) {
+                        if (brick.checkBoundaryToGround(planes[i].position.clone())) {
+                            objToGroundCollision(brick, planes[i], plane_geos[i])
+                        }    
+                        
+                    }
+                    
+
+                }
+
+                for (let i = 0; i < bricks.length; i++) {
+                    for (let j = 0; j < bricks.length; j++) {
+                        if (i == j) continue
+                        objToOBjCollision(bricks[i], bricks[j])
+                    }
+                }
+
+                for (let brick of bricks) {
+                    brick.applyNewState()
                 }
             }
 
 
-            function objGroundCollision(obj, s_new, ground_mesh) {
+            function objToGroundCollision(obj, ground_mesh, ground_geo) {
                 const ground_vertices = ground_mesh.geometry.getAttribute('position')
-                const ground_face_indices = plane_geo.getIndex()
+                const ground_face_indices = ground_geo.getIndex()
                 const ground_faces = []
-
+                const ground_edges = []
                 for (let i = 0; i < ground_face_indices.count; i += 3) {
                     ground_faces.push(new THREE.Triangle(
                         getV3(ground_vertices, ground_face_indices.getX(i)),
                         getV3(ground_vertices, ground_face_indices.getY(i)),
                         getV3(ground_vertices, ground_face_indices.getZ(i)),
                     ))    
+                    // const vs = [
+                    //     ground_face_indices.getX(i), 
+                    //     ground_face_indices.getY(i), 
+                    //     ground_face_indices.getZ(i),
+                    //     ground_face_indices.getX(i)
+                    // ]  
+                    // for (let j = 0; j < 3; j++) {
+                    //     ground_edges.push([
+                    //         getV3(ground_vertices, vs[j]),
+                    //         getV3(ground_vertices, vs[j + 1]),
+                    //     ])
+                    // }
                 }
                 
-                const v_old = obj.getVerticesWorld()
-                const v_new = obj.getVerticesWorld(s_new)
-                console.log('old', v_old, 'new', v_new)
+                const v_old = obj.getVerticesWorld('old')
+                const v_new = obj.getVerticesWorld('new')
+                // console.log('old', v_old, 'new', v_new)
 
-                const v_velocity_new = new THREE.Vector3(0, 0, 0)
-
-                const P_delta_total = new THREE.Vector3(0, 0, 0)
-                const L_delta_total = new THREE.Vector3(0, 0, 0)
-
+                // Point-Face Collision
                 for (let i = 0; i < obj.v_num; i++) {
 
                     const move = v_new[i].clone()
@@ -267,48 +331,98 @@
                             // console.log("p on plane", p_on_plane)
                             if (!ground_tri.containsPoint(p_on_plane)) continue
 
-                            const normal_scalar = v_velocity.clone().dot(tri_n)
-                            const v_velocity_normal = tri_n.clone().multiplyScalar(normal_scalar)
-                            const v_velocity_tangent = v_velocity.clone().sub(v_velocity_normal)
+                            const v_minus = v_velocity.clone().dot(tri_n)
+                            // const v_velocity_normal = tri_n.clone().multiplyScalar(v_minus)
+                            // const v_velocity_tangent = v_velocity.clone().sub(v_velocity_normal)
                             
-                            const d1 = -1 * (1 + params.c_r) * normal_scalar
+                            const d1 = -1 * (1 + params.c_r) * v_minus
                             const d2 = 1 / obj.mass + tri_n.dot(r.clone().cross(tri_n).cross(r).applyMatrix3(obj.I_inv))
                             const j = d1 / d2
                             const P_delta = tri_n.clone().multiplyScalar(j)
-                            const L_delta = r.clone().cross(tri_n).multiplyScalar(j)
+                            const L_delta = r.clone().cross(tri_n).multiplyScalar(j * params.c_f)
                             
                             console.log("i", i, P_delta, L_delta)
-                            P_delta_total.add(P_delta)
-                            L_delta_total.add(L_delta)
-
-
-                            // // Add velocity response restriction
-                            // v_velocity_normal.multiplyScalar(0.8).negate()
-                            // v_velocity_tangent.multiplyScalar(0.5)
-                            // v_velocity_normal.add(v_velocity_tangent)
-                            // v_velocity_new.add(v_velocity_normal)
+                            obj.P_delta_total.add(P_delta)
+                            obj.L_delta_total.add(L_delta)
 
                         }
 
                     }
                     
                 }
-                
-                console.log('P_delta_total', P_delta_total, 'L_delta_total', L_delta_total)
 
-                s_new[2].add(P_delta_total)
-                s_new[3].add(L_delta_total)
-                // if (P_delta_total.length() > 0) {
-                    // s_new[2].copy(P_delta_total)
-                    // s_new[3].copy(L_delta_total)
-                // }
-                
+                // Edge-edge collision
 
-                return s_new
+                
+                // console.log('P_delta_total', obj.P_delta_total, 'L_delta_total', obj.L_delta_total)
+
+                
             }
 
-            function pointFaceCollision(obj1, obj2) {
+            function objToOBjCollision(obj1, obj2) {
 
+                const v1_old = obj1.getVerticesWorld('old')
+                const v1_new = obj1.getVerticesWorld('new')
+                // console.log('old', v1_old, 'new', v1_new)
+
+                for (let i = 0; i < obj1.v_num; i++) {
+
+                    const move = v1_new[i].clone()
+                    move.sub(v1_old[i])
+
+                    const v1_velocity = obj1.ds[0].clone()
+                    const r1 = v1_old[i].clone().sub(obj1.s[0])
+                    const angle1_velocity = obj1.w.clone().cross(r1)
+                    // console.log('velocity', v_velocity, angle_velocity)
+                    v1_velocity.add(angle1_velocity)                
+
+                    for (let obj2_tri of obj2.faces) {
+                        const tri_n = new THREE.Vector3()
+                        obj2_tri.getNormal(tri_n)
+                        
+                        const scalar_old = obj2_tri.a.clone().sub(v1_old[i]).dot(tri_n)
+                        const scalar_new = obj2_tri.a.clone().sub(v1_new[i]).dot(tri_n)
+                        const fraction = scalar_old / (scalar_old - scalar_new)
+
+                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
+                            const p_on_plane = v1_old[i].clone()
+                            p_on_plane.addScaledVector(move, fraction)
+                            
+                            // console.log("p on plane", p_on_plane)
+                            if (!obj2_tri.containsPoint(p_on_plane)) continue
+
+                            const v2_velocity = obj2.ds[0].clone()
+                            const r2 = p_on_plane.clone().sub(obj2.s[0])
+                            const angle1_velocity = obj2.w.clone().cross(r2)
+                            // console.log('velocity', v_velocity, angle_velocity)
+                            v2_velocity.add(angle1_velocity)      
+
+                            const v_minus = v1_velocity.clone().sub(v2_velocity).dot(tri_n)
+                            // const v_velocity_normal = tri_n.clone().multiplyScalar(v_minus)
+                            // const v_velocity_tangent = v_velocity.clone().sub(v_velocity_normal)
+                            
+                            const d1 = -1 * (1 + params.c_r) * v_minus
+                            const tmp_v1 = r1.clone().cross(tri_n).cross(r1).applyMatrix3(obj1.I_inv)
+                            const tmp_v2 = r2.clone().cross(tri_n).cross(r2).applyMatrix3(obj2.I_inv)
+                            tmp_v1.add(tmp_v2)
+                            const d2 = 1 / obj1.mass + 1 / obj2.mass + tri_n.dot(tmp_v1)
+                            const j = d1 / d2
+                            const P_delta = tri_n.clone().multiplyScalar(j)
+                            const L1_delta = r1.clone().cross(tri_n).multiplyScalar(j)
+                            const L2_delta = r1.clone().cross(tri_n).multiplyScalar(-j)
+                            
+                            console.log("obj2obj, i", i, P_delta, L1_delta, L2_delta)
+                            obj1.P_delta_total.add(P_delta)
+                            obj1.L_delta_total.add(L1_delta)
+
+                            obj2.P_delta_total.add(P_delta.clone().negate())
+                            obj2.L_delta_total.add(L2_delta)
+
+                        }
+
+                    }
+                    
+                }
             }
 
             function facePointDetect(s, t) {

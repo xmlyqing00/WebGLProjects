@@ -192,11 +192,11 @@ class Brick {
     }
 
     checkBoundaryToGround(ground_center) {
-        // if (ground_center.distanceTo(this.s[0]) > this.boundary) {
-            // return false
-        // } else {
+        if (ground_center.clone().distanceTo(this.s[0]) > this.boundary) {
+            return false
+        } else {
             return true
-        // }
+        }
     }
 }
 

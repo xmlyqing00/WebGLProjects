@@ -43,7 +43,7 @@
 
             // Object variables
             let bricks = []
-            let plane_geos = [], planes = []
+            let plane_geos = [], planes = [], plane_centers = []
             
             const cloth_pos = new THREE.Vector3(0, 10, 0)
             const cloth_mass = 2
@@ -112,6 +112,7 @@
                 // Init
                 planes = []
                 plane_geos = []
+                plane_centers = []
                 bricks = []
                 h_count = 0
 
@@ -130,6 +131,7 @@
                 scene.add( plane )
                 planes.push(plane)
                 plane_geos.push(plane_geo)
+                plane_centers.push(new THREE.Vector3(15, 10, 0))
 
                 plane_geo = new THREE.PlaneGeometry(20, 10)
                 plane_geo.rotateX(Math.PI * 1.5)
@@ -140,6 +142,7 @@
                 scene.add( plane )
                 planes.push(plane)
                 plane_geos.push(plane_geo)
+                plane_centers.push(new THREE.Vector3(-3, -8, 0))
 
                 plane_geo = new THREE.PlaneGeometry(20, 10)
                 plane_geo.rotateX(Math.PI / 2)
@@ -149,6 +152,7 @@
                 scene.add( plane )
                 planes.push(plane)
                 plane_geos.push(plane_geo)
+                plane_centers.push(new THREE.Vector3(5, -40, 0))
 
                 plane_geo = new THREE.PlaneGeometry(20, 10)
                 plane_geo.rotateX(Math.PI / 2)
@@ -158,7 +162,7 @@
                 scene.add( plane )
                 planes.push(plane)
                 plane_geos.push(plane_geo)
-                
+                plane_centers.push(new THREE.Vector3(30, -10, 0))
                 
 
                 controls = new TrackballControls(camera, renderer.domElement);
@@ -196,6 +200,7 @@
                 // Add GUI
                 const gui = new GUI()
                 gui.add(params, 'brick_per_second', 0, 1)
+                gui.add(params, 'c_r', 0, 1)
                 gui.add(params, 'wind')
                 gui.add(params, "Reset")
 
@@ -232,6 +237,8 @@
                     bricks.push(brick)
 
                     console.log('Add brick')
+
+                    document.getElementById("info").innerHTML = "<p>Rigid Body Dynamic Similation. #Bricks: " + bricks.length + "</p>"
                 }
             }
 
@@ -249,11 +256,11 @@
                     brick.computeGrad(forces, poses)
                     brick.calcOneStep(h)
                     brick.calcFacesWorld()
-                    console.log('s', brick.s, 's_new', brick.s_new, 'ds', brick.ds)
-                    console.log('delta', brick.P_delta_total, brick.L_delta_total)
+                    // console.log('s', brick.s, 's_new', brick.s_new, 'ds', brick.ds)
+                    // console.log('delta', brick.P_delta_total, brick.L_delta_total)
                     
                     for (let i = 0; i < planes.length; i++) {
-                        if (brick.checkBoundaryToGround(planes[i].position.clone())) {
+                        if (brick.checkBoundaryToGround(plane_centers[i])) {
                             objToGroundCollision(brick, planes[i], plane_geos[i])
                         }    
                         
@@ -341,7 +348,7 @@
                             const P_delta = tri_n.clone().multiplyScalar(j)
                             const L_delta = r.clone().cross(tri_n).multiplyScalar(j * params.c_f)
                             
-                            console.log("i", i, P_delta, L_delta)
+                            // console.log("i", i, P_delta, L_delta)
                             obj.P_delta_total.add(P_delta)
                             obj.L_delta_total.add(L_delta)
 
@@ -352,7 +359,11 @@
                 }
 
                 // Edge-edge collision
+                // for (let i = 0; i < obj.edges.length; i++) {
+                //     for (let j = 0; j < ground_edges.length; j++) {
 
+                //     }
+                // }
                 
                 // console.log('P_delta_total', obj.P_delta_total, 'L_delta_total', obj.L_delta_total)
 
@@ -411,7 +422,8 @@
                             const L1_delta = r1.clone().cross(tri_n).multiplyScalar(j)
                             const L2_delta = r1.clone().cross(tri_n).multiplyScalar(-j)
                             
-                            console.log("obj2obj, i", i, P_delta, L1_delta, L2_delta)
+                            // console.log("obj2obj, i", i, P_delta, L1_delta, L2_delta)
+
                             obj1.P_delta_total.add(P_delta)
                             obj1.L_delta_total.add(L1_delta)
 
@@ -425,91 +437,6 @@
                 }
             }
 
-            function facePointDetect(s, t) {
-
-                const node_pos = s[0]
-                const node_v = s[1]
-                const box_pos = s[2]
-                const box_v = s[3]
-
-                const node_posn = t[0]
-                const node_vn = t[1]
-                const box_posn = t[2]
-                const box_vn = t[3]
-
-                // Point-face detection
-                const box_node_pos = box_geo.getAttribute('position')
-                // console.log(box_node_pos)
-                const face_node_indices = box_geo.getIndex()
-
-                for (let i = 0; i < node_num; i++) {
-
-                    const x = getV3(node_pos, i).clone()
-                    const xn = getV3(node_posn, i).clone()
-                    const move = xn.clone()
-                    move.sub(x)
-
-                    const vn = node_vn[i].clone()
-                    
-                    
-                    for (let j = 0; j < face_node_indices.count; j += 3) {
-                        const v0 = face_node_indices.getX(j)
-                        const v1 = face_node_indices.getY(j)
-                        const v2 = face_node_indices.getZ(j)
-                        const p0 = new THREE.Vector3(box_node_pos.getX(v0), box_node_pos.getY(v0), box_node_pos.getZ(v0))
-                        const p1 = new THREE.Vector3(box_node_pos.getX(v1), box_node_pos.getY(v1), box_node_pos.getZ(v1))
-                        const p2 = new THREE.Vector3(box_node_pos.getX(v2), box_node_pos.getY(v2), box_node_pos.getZ(v2))
-                        
-                        const n = new THREE.Vector3()
-                        const tri = new THREE.Triangle(p0, p1, p2)
-                        tri.getNormal(n)
-                            
-                        const scalar_old = tri.a.clone().sub(x).dot(n)
-                        const scalar_new = tri.a.clone().sub(xn).dot(n)
-                        const fraction = scalar_old / (scalar_old - scalar_new)
-                            
-                        //     // console.log("scalars", i, scalar_old, scalar_new, fraction, "normal", n)
-                        //     // console.log("subtract", tri.a.clone().sub(ball_old.position))
-                        if ((Math.abs(scalar_old) < 1e-8 && scalar_new < 0) || (fraction > 0 && fraction < 1)) {
-                                
-                            const p_on_plane = x.clone()
-                            p_on_plane.addScaledVector(move, fraction)
-                            
-                            // console.log("p on plane", p_on_plane)
-                            if (!tri.containsPoint(p_on_plane)) continue
-                            
-                            const n = new THREE.Vector3()
-                            tri.getNormal(n)
-                            
-                            // Compute velocity after bouncing
-                            const pt_v_scalar = vn.clone().dot(n)
-                            let new_v_n = n.clone().multiplyScalar(pt_v_scalar)
-                            let new_v_t = vn.clone().sub(new_v_n)
-
-                            // Add velocity response restriction
-                            new_v_n.multiplyScalar(0.8).negate()
-                            new_v_t.multiplyScalar(0.5)
-                            vn.addVectors(new_v_n, new_v_t)
-                            node_vn[i] = vn.clone()
-
-                            const box_v_scalar = box_v.clone().dot(n)
-                            new_v_n = n.clone().multiplyScalar(box_v_scalar)
-                            new_v_t = box_v.clone().sub(new_v_n)
-                            new_v_n.multiplyScalar(0.8).negate()
-                            new_v_t.multiplyScalar(0.5)
-                            box_vn.addVectors(new_v_n, new_v_t)
-                            
-                            node_posn.setXYZ(i, p_on_plane.x, p_on_plane.y, p_on_plane.z)
-                            box_posn.set(box_posn.x, box_posn.y + 0.1, box_posn.z)
-                                
-                        }
-
-                    }
-                }
-
-                return [node_posn, node_vn, box_posn, box_vn]
-                
-            }
 
             function onWindowResize() {
 

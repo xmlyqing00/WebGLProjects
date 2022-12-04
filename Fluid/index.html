@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Fluid Simulation</title>
+        <link type="text/css" rel="stylesheet" href="style.css">
+	</head>
+	<body>
+
+        <div id="container"></div>
+        <div id="info"></div>
+        <script async src="https://ga.jspm.io/npm:es-module-shims@1.5.17/dist/es-module-shims.js"></script>
+        <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.144.0/build/three.module.js",
+                "three/addons/": "./jsm/"
+            }
+        }
+        </script>
+        
+		<script type="module">
+
+            // Load module
+            import * as THREE from 'three'
+            import Stats from 'three/addons/libs/stats.module.js'
+            import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
+            import { GUI } from 'three/addons/libs/lil-gui.module.min.js'
+            import { TextGeometry  } from 'three/addons/geometries/TextGeometry.js'
+            import { OBJLoader  } from 'three/addons/loaders/OBJLoader.js'
+            import { Fluid } from './Fluid.js'
+            import { getV3 } from './libs.js'
+
+            // Simulater variables
+            let camera, scene, renderer, controls, stats
+            const clock = new THREE.Clock()
+            let h_count = 0
+            
+            // Physic variables
+            const gravity = new THREE.Vector3(0, -3, 0)
+            const air_resitance = 0.001
+            const move_step = 0.1
+
+            // Object variables
+            let fluid
+            
+            // GUI params
+            const canvas = document.querySelector("#container")
+            const params = {
+                particle_num: 10,
+                particle_size: 0.7,
+                reverse_gravity: false,
+				Reset: function () {
+                    renderer.domElement.remove()
+                    init()
+				}
+			}
+            
+            const a = [new THREE.Vector3(0, 1, 2)]
+            a[0].multiplyScalar(2)
+            console.log(a)
+
+			init()
+            initControls()
+			animate()
+
+            function init() {
+
+                // Init scene
+                scene = new THREE.Scene()
+                camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.01, 1000 )
+                camera.position.z = -10
+                camera.position.y = 20
+                camera.position.x = 0
+
+                renderer = new THREE.WebGLRenderer({alpha: true})
+                renderer.setPixelRatio( window.devicePixelRatio )
+                renderer.setSize( window.innerWidth, window.innerHeight )
+                renderer.autoClear = false
+                canvas.appendChild( renderer.domElement )
+
+                const light_env = new THREE.AmbientLight( 0xf0f0f0, 0.5 ); // soft white light
+                scene.add( light_env )
+
+                const light_point1 = new THREE.PointLight( 0xffffff, 0.8, 0 )
+                light_point1.position.set( 200, 200, -300 )
+                scene.add(light_point1)
+
+                const light_point2 = new THREE.PointLight( 0xffffff, 0.5, 0 )
+                light_point2.position.set( -200, 200, 300 )
+                scene.add(light_point2)
+                
+                // const axesHelper = new THREE.AxesHelper( 5 );
+                // scene.add( axesHelper );
+                
+                // Init
+                h_count = 0
+
+                // Add plane
+                const plane_geo = new THREE.PlaneGeometry(50, 30)
+                const plane_tex = new THREE.TextureLoader().load("assets/tamu.jpg")
+                const plane_material = new THREE.MeshBasicMaterial({
+                    side: THREE.DoubleSide,
+                    map: plane_tex
+                })
+                plane_geo.rotateX(Math.PI / 2)
+                plane_geo.rotateZ(Math.PI)
+                const plane = new THREE.Mesh( plane_geo, plane_material )
+                scene.add( plane )
+
+                
+                const box = null
+                fluid = new Fluid(params.particle_num, params.particle_size, gravity, box)
+                for (let particle of fluid.particles) {
+                    scene.add(particle.mesh)
+                }
+                
+                console.log('Add Fluid')
+
+                controls = new TrackballControls(camera, renderer.domElement);
+                controls.dynamicDampingFactor = 0.5;
+                controls.rotateSpeed = 2;
+                controls.zoomSpeed = 2;
+                controls.panSpeed = 3;
+
+            }
+
+            function initControls() {
+                
+                // Add stats and controls
+                stats = new Stats();
+				canvas.appendChild( stats.dom )
+
+				window.addEventListener('resize', onWindowResize)
+                
+                // Add GUI
+                const gui = new GUI()
+                gui.add(params, 'particle_num', 1, 1000)
+                gui.add(params, 'particle_size', 0.1, 10)
+                gui.add(params, 'reverse_gravity')
+                gui.add(params, "Reset")
+
+                gui.open()
+                
+            }
+
+			function animate() {
+				requestAnimationFrame( animate )
+
+                let h = Math.min(0.016, clock.getDelta())
+                // let h = clock.getDelta()
+                
+                if (h > 0) {
+                    render(h)
+                }
+                
+                h_count = h_count + h
+
+                controls.update()
+				renderer.render( scene, camera )
+                stats.update()
+			}
+
+            function render(h) {
+                fluid.step(h)
+            }
+
+
+            function onWindowResize() {
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                camera.lookAt( scene.position );
+
+                renderer.setSize( window.innerWidth, window.innerHeight );
+                
+                controls.handleResize();
+
+            }
+
+
+		</script>
+
+	</body>
+</html>

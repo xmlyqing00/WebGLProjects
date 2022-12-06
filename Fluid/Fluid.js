@@ -6,19 +6,19 @@ import { Particle } from './Particle.js'
 class Fluid {
     constructor(particle_num, particle_size, gravity_v3, box_r, box_c) {
         
-        this.r = 3 * particle_size
+        this.r = 5 * particle_size
         this.alpha = 0.3
-        this.beta = 0.5
+        this.beta = 0.3
         this.k_spring = 1
 
         this.k = 5e-3
         this.k_near = 1e-2
-        this.rest_density = 5
+        this.rest_density = 20
         
-        this.k_env = 1e-3
-        this.k_near_env = 1e-2
-        this.rest_density_env = 20
-        this.r_env = 1.0
+        // this.k_env = 1e-3
+        // this.k_near_env = 1e-2
+        // this.rest_density_env = 20
+        // this.r_env = 1.0
     
         this.particle_num = particle_num
         this.gravity_v3 = gravity_v3
@@ -29,18 +29,18 @@ class Fluid {
             const vel = new THREE.Vector3(0, 0, 0)
             const mass = 1
             this.particles.push(new Particle(
-                i, particle_size * 0.7, pos, vel, mass
+                i, particle_size, pos, vel, mass
             ))
         }
 
-        this.env_particles = []
+        // this.env_particles = []
         this.box_r = box_r
         this.box_c = box_c
 
     }
 
-    updateContainer(container_move, h) {
-        console.log(container_move, h)
+    updateContainer(container_move, container_r, h) {
+        this.box_r = container_r
         this.box_c.addScaledVector(container_move, h)
     }
 
@@ -68,7 +68,7 @@ class Fluid {
         const gravity = this.gravity_v3.clone().multiplyScalar(gravity_scalar)
         for (let pt of this.particles) {
             pt.neighbors = []
-            pt.env_neighbors = []
+            // pt.env_neighbors = []
             
             pt.old_pos = pt.pos.clone()
             // Apply gravity
@@ -220,17 +220,21 @@ class Fluid {
 
         }
         
-        const r_f = 1
+        const r_f = 0.8
 
-        console.log(this.box_c, this.box_r)
+        // console.log(this.box_c, this.box_r)
         
         for (let pt of this.particles) {
             let d = pt.pos.clone().sub(pt.old_pos)
             pt.vel.copy(d.multiplyScalar(1/h))
 
-            if (pt.pos.y <= this.box_c.y - this.box_r) {
-                pt.vel = new THREE.Vector3(pt.vel.x, 0.8 * Math.abs(pt.vel.y), pt.vel.z)
-                pt.pos = new THREE.Vector3(pt.pos.x, 0, pt.pos.z)
+            if (pt.pos.y <= this.box_c.y - this.box_r * 2) {
+                pt.vel = new THREE.Vector3(pt.vel.x, r_f * Math.abs(pt.vel.y), pt.vel.z)
+                pt.pos = new THREE.Vector3(pt.pos.x, this.box_c.y - this.box_r * 2, pt.pos.z)
+            }
+            if (pt.pos.y >= this.box_c.y + this.box_r * 2) {
+                pt.vel = new THREE.Vector3(pt.vel.x, -r_f * Math.abs(pt.vel.y), pt.vel.z)
+                pt.pos = new THREE.Vector3(pt.pos.x, this.box_c.y + this.box_r * 2, pt.pos.z)
             }
 
             if (pt.pos.z >= this.box_c.z + this.box_r) {

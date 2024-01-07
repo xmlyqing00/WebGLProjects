@@ -1,5 +1,9 @@
 # WebGLProjects
 
+Screenshot:
+
+![](screenshot.png)
+---
 A collection of my graphics projects. They are implemented in ThreeJS and WebGL. Online demos are here: [https://xmlyqing00.github.io/WebGLProjects/](https://xmlyqing00.github.io/WebGLProjects/).
 
 The list of the project names:
